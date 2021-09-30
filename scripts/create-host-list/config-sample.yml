@@ -1,0 +1,11 @@
+config:
+    openstack:
+        env:
+            OS_AUTH_URL: http://134......:5000/v3/
+            OS_USERNAME: thelostelectron
+            OS_PROJECT_ID: 7f77......
+            OS_PASSWORD: null
+            OS_IDENTITY_API_VERSION: "3"
+        subnet: "192.168.0.0/16"
+    output:
+        location: /home/student/bootstrap-cwdc/playbook/config/hosts/hosts

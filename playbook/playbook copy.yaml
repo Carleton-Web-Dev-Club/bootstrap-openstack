@@ -1,0 +1,265 @@
+- name: Expand LVM
+  hosts: all
+  become: true
+  tasks:
+    - name: Expand LVM
+      command: /home/student/extend-lvm/extend-lvm.sh  /dev/vda
+      changed_when: false
+
+- name: System Update
+  hosts: all:!bastion
+  become: true
+  serial: 10
+  tasks:
+    - name: Update and Upgrade
+      apt:
+        update_cache: yes
+        upgrade: full
+        autoremove: yes
+    - name: Check if reboot is needed
+      stat:
+        path: /var/run/reboot-required
+      register: stat_result
+
+    - name: Reboot
+      when: stat_result.stat.exists
+      reboot:
+
+- name: Set Hostname
+  hosts: all:!bastion
+  become: true
+  serial: 10
+  tasks:
+    - name: Set Hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+      when: "inventory_hostname != ansible_hostname"
+
+    - name: Check if reboot is needed
+      stat:
+        path: /var/run/reboot-required
+      register: stat_result
+        
+    - name: Reboot
+      when: stat_result.stat.exists
+      reboot:
+
+- name: Update Hosts
+  hosts: all
+  become: true
+  tasks:
+    - name: Copy Hosts File
+      template: 
+        src: config/hosts/hosts
+        dest: /etc/hosts
+
+- name : hashicorp-repo-install
+  hosts: [servers, clients, bastion]
+  become: true
+  tasks:
+    - name: Add Hashicorp GPG apt Key
+      apt_key:
+        url: https://apt.releases.hashicorp.com/gpg
+        state: present
+   
+    - name: Add Hashicorp Repository
+      apt_repository:
+        repo: deb https://apt.releases.hashicorp.com bionic main
+        state: present
+
+- name : ceph-repo-install
+  hosts: [ceph_monitors, ceph_managers, ceph_osds, bastion]
+  become: true
+  tasks:
+    - name: Add Ceph GPG apt Key
+      apt_key:
+        url: https://download.ceph.com/keys/release.asc
+        state: present
+   
+    - name: Add Ceph Repository
+      apt_repository:
+        repo: deb https://download.ceph.com/debian-16.2.6 bionic main
+        state: present
+    - name: Add Ceph Repository
+      apt_repository:
+        repo: deb https://download.ceph.com/debian-pacific/  focal main
+        state: present
+
+
+- name : docker-install
+  hosts: [clients,ceph_monitors]
+  become: true
+  tasks:
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+   
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: Install Docker
+      apt: 
+        update_cache: yes 
+        name: docker-ce
+        state: latest
+    - name: adding student to group sudo
+      user:
+        name: 'student'
+        groups: docker
+        append: yes
+
+
+- name : nomad-install
+  hosts: [servers, clients, bastion]
+  become: true
+  tasks:
+    - name: Install Nomad
+      apt: 
+        update_cache: yes 
+        name: nomad
+        state: latest
+    
+
+- name : consul-install
+  hosts: [servers, clients]
+  become: true
+  tasks:
+    - name: Install consul
+      apt: 
+        update_cache: yes 
+        name: consul
+        state: latest
+
+- name : vault-install
+  hosts: [servers, bastion]
+  become: true
+  tasks:
+    - name: Install Vault
+      apt: 
+        update_cache: yes 
+        name: vault
+        state: latest
+
+- name : waypoint-install
+  hosts: [bastion]
+  become: true
+  tasks:
+    - name: Install Waypoint
+      apt: 
+        update_cache: yes 
+        name: waypoint
+        state: latest
+
+- name : cephadm-install
+  hosts: [bastion, ceph_managers, ceph_monitors, ceph_osds]
+  become: true
+  tasks:
+    - name: Install Cephadm
+      apt: 
+        update_cache: yes 
+        name: [cephadm, ceph, ceph-mds]
+        state: absent
+    - name: Install Cephadm
+      apt: 
+        update_cache: yes 
+        name: [cephadm, ceph, ceph-mds]
+        state: latest
+
+
+- name: Ceph Monitor Config
+  hosts: none
+  become: true
+  tasks:
+    - name: Install Server Config
+      template:
+        src: config/ceph/monitor/ceph.conf
+        dest: /etc/ceph
+    - name: Delete Existing Keys
+      delegate_to: bastion
+      run_once: true
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items: 
+        - /tmp/ceph.mon.keyring
+        - /etc/ceph/ceph.client.admin.keyring
+        - /var/lib/ceph/bootstrap-osd/ceph.keyring
+        - /tmp/monmap
+    - name: Delete Existing Keys
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items: 
+        - /tmp/monmap
+
+
+    - name: Generate Monitor Key
+      delegate_to: bastion
+      run_once: true
+      command: ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+
+    - name: Generate Admin Key
+      delegate_to: bastion
+      run_once: true
+      command: ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+    
+    - name: Generate Bootstrap Key
+      delegate_to: bastion
+      run_once: true
+      command: ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
+    
+    - name: Combine Admin + Mon Keys
+      delegate_to: bastion
+      run_once: true
+      command: ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+      
+    - name: Combine Bootstrap + Mon Keys
+      delegate_to: bastion
+      run_once: true
+      command: ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
+    
+    - name: Make Keyring readable
+      delegate_to: bastion
+      become: true
+      run_once: true
+      file:
+        path: /tmp/ceph.mon.keyring
+        mode: o+r
+    
+    - name: Copy keyring
+      copy:
+        src: /tmp/ceph.mon.keyring
+        dest: /tmp/ceph.mon.keyring
+        owner: ceph
+        group: ceph
+    
+    - name: Init Monitor Maps
+      command:
+        cmd: monmaptool --create --clobber --fsid 6e6bb4ba-52ce-4bc9-bb94-ecc373c8730d /tmp/monmap
+
+    - name: Generate Monitor Maps
+      with_items: "{{ansible_play_hosts}}"
+      command:
+        cmd: monmaptool --add {{ item }} {{ hostvars[item]['ansible_default_ipv4']['address']}} --fsid 6e6bb4ba-52ce-4bc9-bb94-ecc373c8730d /tmp/monmap
+    - name: make data dir
+      file:
+        path: "/var/lib/ceph/mon/ceph-{{ansible_hostname}}"
+        owner: ceph
+        group: ceph
+        state: directory
+        mode: '0755'
+    - name: Populate mon daemons
+      command: sudo -u ceph ceph-mon --mkfs -i {{ansible_hostname}} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+    
+    - name: Start mon
+      command: systemctl start ceph-mon@{{ansible_hostname}}
+
+
+  
+
+
+
+      

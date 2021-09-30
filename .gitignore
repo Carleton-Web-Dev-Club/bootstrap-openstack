@@ -1,0 +1,8 @@
+*.env
+os-commands
+*.log
+*.key
+*.keyring
+config.*
+ceph/**/ceph.conf
+**/__pycache__/
