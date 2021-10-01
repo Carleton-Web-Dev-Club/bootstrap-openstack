@@ -87,7 +87,7 @@
   become: true
   tasks:
     - name: Remove from VG
-      shell: sudo vgremove `sudo vgs | grep "ceph.*128" | awk '{ print $1 }'` -ff
+      shell: sudo vgremove `sudo vgs | grep "ceph.*128" | awk '{ print $1 }'` -ff || true
     - name: Format as ext4
       shell: sudo mkfs.ext4 /dev/vdb -F
 
