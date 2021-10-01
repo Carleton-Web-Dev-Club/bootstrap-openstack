@@ -1,0 +1,13 @@
+- name: Update and Upgrade
+  apt:
+    update_cache: yes
+    upgrade: full
+    autoremove: yes
+- name: Check if reboot is needed
+  stat:
+    path: /var/run/reboot-required
+  register: stat_result
+  
+- name: Reboot
+  when: stat_result.stat.exists
+  reboot:

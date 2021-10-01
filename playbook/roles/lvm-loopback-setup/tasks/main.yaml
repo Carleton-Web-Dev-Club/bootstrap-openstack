@@ -1,0 +1,28 @@
+- name: Check if loopback file exists
+  stat: 
+    path: /opt/data.img
+  register: lb_file
+
+- name: Create disk
+  command: "dd if=/dev/zero of=/opt/data.img bs=1M count={{loopback_mb}}"
+  when: not lb_file.stat.exists
+
+- name: Change loopback perms
+  command: chmod 777 /opt/data.img
+  when: not lb_file.stat.exists
+
+- name: Mount Loopback
+  command: losetup /dev/loop0 /opt/data.img
+  when: not lb_file.stat.exists
+
+- name: Create Physical Disk
+  command: pvcreate /dev/loop0
+  when: not lb_file.stat.exists
+
+- name: Create Ceph-Volume-Group Disk
+  command: vgcreate vg-ceph /dev/loop0
+  when: not lb_file.stat.exists
+  
+- name: Create LV on VG Disk
+  command: lvcreate -n lv01 -l 100%FREE vg-ceph
+  when: not lb_file.stat.exists

@@ -1,0 +1,17 @@
+- name: Create a directory if it does not exist
+  become: False
+  run_once: true
+  ansible.builtin.file:
+    path: "{{ ceph-deploy-dir }}"
+    state: directory
+
+- name: Zap Disks
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy disk zap {{ inventory_hostname }} {{ disk_location }}"
+    chdir: "{{ ceph-deploy-dir }}"
+- name: Zap Disks
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy ose create {{ inventory_hostname }} --data {{ disk_location }}"
+    chdir: "{{ ceph-deploy-dir }}"

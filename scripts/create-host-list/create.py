@@ -41,7 +41,7 @@ def main():
     servers = openstack.runOpenstackCommand(config['openstack'],["server list"])
     
     hosts = genHosts(config['openstack'], servers)
-    writeLocation = config.get('output',{}).get('location','/tmp/hosts')
+    writeLocation = os.path.join(sys.path[0],config.get('output',{}).get('location','../../playbook/roles/networked/config/hosts/hosts'))
     f = open(writeLocation,"w")
     f.write(hosts)
     f.close

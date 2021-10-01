@@ -1,0 +1,38 @@
+- name: Generate Host Lists
+  run_once: true
+  when: get_from_openstack is defined and get_from_openstack
+  local_action: 
+     module: command
+     cmd: "{{ playbook_dir }}/../scripts/create-host-list/create.py" 
+     
+- name: Set Hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: "inventory_hostname != ansible_hostname"
+
+- name: Copy Hosts File
+  template: 
+    src: ../config/hosts/hosts
+    dest: /etc/hosts
+
+- name: Copy NTP File
+  template: 
+    src: ../config/ntp/timesyncd.conf
+    dest: /etc/systemd/timesyncd.conf
+
+- name: Enable NTP
+  command: timedatectl set-ntp on
+
+- name: Restart Timesyncd
+  ansible.builtin.systemd:
+    state: restarted
+    daemon_reload: yes
+    name: systemd-timesyncd
+
+- name: Check if reboot is needed
+  stat:
+    path: /var/run/reboot-required
+  register: stat_result        
+- name: Reboot
+  when: stat_result.stat.exists
+  reboot:

@@ -6,205 +6,95 @@
       command: /home/student/extend-lvm/extend-lvm.sh  /dev/vda
       changed_when: false
 
-- name: System Update
+- name: Configure Networking And Update
   hosts: all:!bastion
   become: true
   serial: 10
-  tasks:
-    - name: Update and Upgrade
-      apt:
-        update_cache: yes
-        upgrade: full
-        autoremove: yes
-    - name: Check if reboot is needed
-      stat:
-        path: /var/run/reboot-required
-      register: stat_result
+  roles:
+    - role: networked
+      vars:
+        get_from_openstack: False
+    - debian
 
-    - name: Reboot
-      when: stat_result.stat.exists
-      reboot:
-
-- name: Set Hostname
-  hosts: all:!bastion
-  become: true
-  serial: 10
-  tasks:
-    - name: Set Hostname
-      hostname:
-        name: "{{ inventory_hostname }}"
-      when: "inventory_hostname != ansible_hostname"
-
-    - name: Check if reboot is needed
-      stat:
-        path: /var/run/reboot-required
-      register: stat_result
-        
-    - name: Reboot
-      when: stat_result.stat.exists
-      reboot:
-
-- name: Update Hosts
-  hosts: all
-  become: true
-  tasks:
-    - name: Copy Hosts File
-      template: 
-        src: config/hosts/hosts
-        dest: /etc/hosts
-    - name: Copy NTP File
-      template: 
-        src: config/ntp/timesyncd.conf
-        dest: /etc/systemd/timesyncd.conf
-    - name: Enable NTP
-      command: timedatectl set-ntp on
-    - name: Restart Timesyncd
-      ansible.builtin.systemd:
-        state: restarted
-        daemon_reload: yes
-        name: systemd-timesyncd
-
-- name : hashicorp-repo-install
-  hosts: [servers, clients, bastion]
-  become: true
-  tasks:
-    - name: Add Hashicorp GPG apt Key
-      apt_key:
-        url: https://apt.releases.hashicorp.com/gpg
-        state: present
-   
-    - name: Add Hashicorp Repository
-      apt_repository:
-        repo: deb https://apt.releases.hashicorp.com bionic main
-        state: present
-
-- name : ceph-repo-install
-  hosts: [ceph_monitors, ceph_managers, ceph_osds, bastion]
-  become: true
-  tasks:
-    - name: Add Ceph GPG apt Key
-      apt_key:
-        url: https://download.ceph.com/keys/release.asc
-        state: present
-   
-    - name: Add Ceph Repository
-      apt_repository:
-        repo: deb https://download.ceph.com/debian-16.2.6 bionic main
-        state: present
-    - name: Add Ceph Repository
-      apt_repository:
-        repo: deb https://download.ceph.com/debian-pacific/  focal main
-        state: present
-
-
-- name : docker-install
-  hosts: [clients,ceph_monitors]
-  become: true
-  tasks:
-    - name: Add Docker GPG apt Key
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
-   
-    - name: Add Docker Repository
-      apt_repository:
-        repo: deb https://download.docker.com/linux/ubuntu bionic stable
-        state: present
-
-    - name: Install Docker
-      apt: 
-        update_cache: yes 
-        name: docker-ce
-        state: latest
-    - name: adding student to group sudo
-      user:
-        name: 'student'
-        groups: docker
-        append: yes
-
-
-- name : nomad-install
-  hosts: [servers, clients, bastion]
-  become: true
-  tasks:
-    - name: Install Nomad
-      apt: 
-        update_cache: yes 
-        name: nomad
-        state: latest
-    
-
-- name : consul-install
+- name : Hasicorp Cluster Install
   hosts: [servers, clients]
   become: true
-  tasks:
-    - name: Install consul
-      apt: 
-        update_cache: yes 
-        name: consul
-        state: latest
+  roles:
+    - role: hashicorp-software
+      vars:
+        programs: 
+         - nomad
+         - consul
+         - vault
 
-- name : vault-install
-  hosts: [servers, bastion]
-  become: true
-  tasks:
-    - name: Install Vault
-      apt: 
-        update_cache: yes 
-        name: vault
-        state: latest
-
-- name : waypoint-install
+- name : Hashicorp Bastion install
   hosts: [bastion]
   become: true
-  tasks:
-    - name: Install Waypoint
-      apt: 
-        update_cache: yes 
-        name: waypoint
-        state: latest
+  roles:
+    - role: hashicorp-software
+      vars:
+        programs: 
+         - nomad
+         - vault
+         - waypoint
+        
 
-- name : cephadm-install
-  hosts: [ceph_managers, ceph_monitors, ceph_osds]
+- name : Ceph Install
+  hosts: [ceph_monitors, ceph_managers, ceph_osds_loopback, ceph_osds_physical, bastion]
+  become: true
+  roles:
+    - ceph-host
+
+
+- name : Ceph Deploy Install
+  hosts: bastion
   become: true
   tasks:
-    - name: Install Cephadm
+    - name: Install Software
       apt: 
         update_cache: yes 
-        name: [ceph, ceph-mds]
+        name: "ceph-deploy"
 
-
-- name: Ceph Monitor Config
-  hosts: none
+- name : docker-install
+  hosts: clients
   become: true
-  tasks:
-    - name: Install Server Config
-      command: sudo systemctl stop firewalld
+  roles:
+    - role: docker-host
+      vars:
+        - username: student
+      
+- name: LVM loopback Setup
+  hosts: [ceph_osds_loopback]
+  become: true
+  roles:
+    - lvm-loopback-setup
+
+- name: Ceph Monitor 
+  hosts: [ceph_monitors]
+  roles:
+    - role: ceph-monitor
+
 
 - name: Ceph OSD loopback
   hosts: [ceph_osds_loopback]
+  roles:
+    - role: ceph-osd
+      vars:
+        - disk_location: "{{ ceph_osd_loopback_drive }}"
+
+- name: Format Network Volume
+  hosts: backup
   become: true
   tasks:
-    - name: Check if loopback file exists
-      stat: 
-        path: /opt/data.img
-      register: lb_file
-    - name: Create disk
-      command: dd if=/dev/zero of=/opt/data.img bs=1G count=10
-      when: not lb_file.stat.exists
-    - name: Change loopback perms
-      command: chmod 777 /opt/data.img
-      when: not lb_file.stat.exists
-    - name: Mount Loopback
-      command: losetup /dev/loop0 /opt/data.img
-      when: not lb_file.stat.exists
-    - name: Create Physical Disk
-      command: pvcreate /dev/loop0
-      when: not lb_file.stat.exists
-    - name: Create Ceph-Volume-Group Disk
-      command: vgcreate vg-ceph /dev/loop0
-      when: not lb_file.stat.exists
-    - name: Create LV on VG Disk
-      command: lvcreate -n lv01 -l 100%FREE vg-ceph
-      when: not lb_file.stat.exists
+    - name: Remove from VG
+      shell: sudo vgremove `sudo vgs | grep "ceph.*128" | awk '{ print $1 }'` -ff
+    - name: Format as ext4
+      shell: sudo mkfs.ext4 /dev/vdb -F
+
+- name: Ceph OSD Physical
+  hosts: [ceph_osds_physical]
+  roles:
+    - role: ceph-osd
+      vars:
+        - disk_location: "{{ ceph_osd_physical_drive }}"
       

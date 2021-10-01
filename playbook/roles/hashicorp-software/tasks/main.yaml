@@ -1,0 +1,14 @@
+- name: Add Hashicorp GPG apt Key
+  apt_key:
+    url: https://apt.releases.hashicorp.com/gpg
+    state: present
+
+- name: Add Hashicorp Repository
+  apt_repository:
+    repo: deb https://apt.releases.hashicorp.com bionic main
+    state: present
+
+- name: Install Software
+  apt: 
+    update_cache: yes 
+    name: "{{programs}}"
