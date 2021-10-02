@@ -6,3 +6,4 @@ os-commands
 config.*
 ceph/**/ceph.conf
 **/__pycache__/
+openstack-envs/**

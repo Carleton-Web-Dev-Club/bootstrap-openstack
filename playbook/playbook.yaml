@@ -6,26 +6,41 @@
       command: /home/student/extend-lvm/extend-lvm.sh  /dev/vda
       changed_when: false
 
-- name: Configure Networking And Update
-  hosts: all:!bastion
+- name: Configure Networking
+  hosts: all
   become: true
   serial: 10
   roles:
     - role: networked
+      tags:
+        - networking
       vars:
         get_from_openstack: False
+
+- name: Update
+  hosts: all:!bastion
+  become: true
+  serial: 10
+  roles:
     - debian
 
-- name : Hasicorp Cluster Install
-  hosts: [servers, clients]
+- name : Consul Install
+  hosts: [consul, bastion]
+  become: true
+  roles:
+    - role: hashicorp-software
+      vars:
+        programs: 
+         - consul
+
+- name : Nomad Install
+  hosts: [nomad, bastion]
   become: true
   roles:
     - role: hashicorp-software
       vars:
         programs: 
          - nomad
-         - consul
-         - vault
 
 - name : Hashicorp Bastion install
   hosts: [bastion]
@@ -34,13 +49,11 @@
     - role: hashicorp-software
       vars:
         programs: 
-         - nomad
-         - vault
          - waypoint
         
 
 - name : Ceph Install
-  hosts: [ceph_monitors, ceph_managers, ceph_osds_loopback, ceph_osds_physical, bastion]
+  hosts: [ceph_hosts, bastion]
   become: true
   roles:
     - ceph-host
@@ -56,7 +69,7 @@
         name: "ceph-deploy"
 
 - name : docker-install
-  hosts: clients
+  hosts: nomad_clients
   become: true
   roles:
     - role: docker-host
@@ -69,11 +82,13 @@
   roles:
     - lvm-loopback-setup
 
-- name: Ceph Monitor 
-  hosts: [ceph_monitors]
+- name: Ceph-Deploy Setup
+  hosts: bastion
   roles:
-    - role: ceph-monitor
+    - ceph-monitor
+    - ceph-mgr
 
+    
 
 - name: Ceph OSD loopback
   hosts: [ceph_osds_loopback]

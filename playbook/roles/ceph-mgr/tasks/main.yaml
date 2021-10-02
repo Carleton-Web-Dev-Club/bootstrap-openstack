@@ -1,0 +1,5 @@
+- name: Setup Managers
+  run_once: true
+  command: 
+    cmd: "ceph-deploy --overwrite-conf mgr create {{ groups['ceph_managers'] | join(' ') }}"
+    chdir: "{{ ceph_deploy_dir }}"

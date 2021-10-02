@@ -1,49 +1,41 @@
 - name: Create a directory if it does not exist
   run_once: true
-  delegate_to: bastion
   ansible.builtin.file:
     path: "{{ ceph_deploy_dir }}"
     state: directory
 
 - name: Create New Monitors
-  delegate_to: bastion
   run_once: true
   command: 
     cmd: "ceph-deploy --overwrite-conf new {{ groups['ceph_monitors'] | join(' ') }}"
     chdir: "{{ ceph_deploy_dir }}"
 
 - name: Copy Conf File
-  delegate_to: bastion
   run_once: true
   ansible.builtin.copy:
-    src: ../config/ceph/ceph.conf
-    dest: "{{ ceph_deploy_dir }}/ceph.conf"
+    src: ../config/ceph/ceph-tail.conf
+    dest: "{{ ceph_deploy_dir }}/ceph-tail.conf"
 
+- name: Edit Conf File
+  run_once: true
+  shell:
+    cmd: "cat ceph.conf ceph-tail.conf > ceph-combined.conf; mv ceph-combined.conf ceph.conf"
+    chdir : "{{ ceph_deploy_dir }}"
 
 - name: Install Ceph
-  delegate_to: bastion
   run_once: true
   command: 
-    cmd: "ceph-deploy --overwrite-conf install {{ groups['ceph_install_locations'] | join(' ') }}"
+    cmd: "ceph-deploy --overwrite-conf install {{ groups['ceph_hosts'] | join(' ') }}"
     chdir: "{{ ceph_deploy_dir }}"
 
 - name: Create Monitors
-  delegate_to: bastion
   run_once: true
   command: 
     cmd: "ceph-deploy --overwrite-conf mon create-initial"
     chdir: "{{ ceph_deploy_dir }}"
 
 - name: Copy Keys
-  delegate_to: bastion
   run_once: true
   command: 
-    cmd: "ceph-deploy --overwrite-conf admin bastion {{ groups['ceph_install_locations'] | join(' ') }}"
-    chdir: "{{ ceph_deploy_dir }}"
-
-- name: Copy Keys
-  delegate_to: bastion
-  run_once: true
-  command: 
-    cmd: "ceph-deploy --overwrite-conf mgr create {{ groups['ceph_managers'] | join(' ') }}"
+    cmd: "ceph-deploy --overwrite-conf admin bastion {{ groups['ceph_hosts'] | join(' ') }}"
     chdir: "{{ ceph_deploy_dir }}"

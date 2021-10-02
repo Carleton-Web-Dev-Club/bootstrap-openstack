@@ -4,7 +4,16 @@ import yaml,os, ipaddress
 from importlib.machinery import SourceFileLoader
 openstack = SourceFileLoader("openstack", os.path.join(sys.path[0],"../lib/openstack.py")).load_module()
 
-
+def shouldBeReset(server, name:str):
+    if name.startswith("nc-"):
+        return True
+    elif name.startswith("ns-"):
+        return True
+    elif name.startswith("backup"):
+        return True
+    elif name.startswith("cm-"):
+        return True    
+    return False
 
 
 def main():
@@ -19,7 +28,7 @@ def main():
         sys.exit(1)
     servers = openstack.runOpenstackCommand(config['openstack'],["server list"])
     for serve in servers:
-        if serve['Name'].startswith("nc") or serve['Name'].startswith("ns") or serve['Name'] == "backup":
+        if shouldBeReset(serve, serve['Name']):
             print (serve['Name'], serve['ID'])
             openstack.runOpenstackCommand(config['openstack'],["server", "rebuild", serve['ID']], False)
 
