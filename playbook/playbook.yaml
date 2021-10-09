@@ -10,10 +10,10 @@
   hosts: all
   become: true
   serial: 10
+  tags:
+    - networked
   roles:
     - role: networked
-      tags:
-        - networking
       vars:
         get_from_openstack: False
 
@@ -27,6 +27,8 @@
 - name : Consul Install
   hosts: [consul, bastion]
   become: true
+  tags:
+    - consul
   roles:
     - role: hashicorp-software
       vars:
@@ -36,11 +38,24 @@
 - name : Nomad Install
   hosts: [nomad, bastion]
   become: true
+  tags:
+  - nomad
   roles:
     - role: hashicorp-software
       vars:
         programs: 
          - nomad
+
+- name : Vault Install
+  hosts: [vault_clients]
+  become: true
+  tags:
+    - vault
+  roles:
+    - role: hashicorp-software
+      vars:
+        programs: 
+         - vault
 
 - name : Hashicorp Bastion install
   hosts: [bastion]
@@ -51,6 +66,65 @@
         programs: 
          - waypoint
         
+- name : Consul Servers
+  hosts: [consul_servers]
+  become: true
+  tags:
+    - consul
+    - consul_config
+  roles:
+    - role: consul-host
+      vars:
+        consul_server: True
+
+- name : Consul Clients
+  hosts: [consul_clients]
+  become: true
+  tags:
+    - consul
+    - consul_config
+  roles:
+    - role: consul-host
+    
+- name : Consul ACL Bootstrap
+  hosts: [consul]
+  become: true
+  tags:
+    - consul
+    - consul_config
+  roles:
+    - role: consul-bootstrapper
+
+- name : Nomad Servers
+  hosts: [nomad_servers]
+  become: true
+  tags:
+    - nomad
+    - nomad-config
+  roles:
+    - role: nomad-host
+      vars:
+        nomad_server: True
+
+- name : Nomad Clients
+  hosts: [nomad_clients]
+  tags:
+  - nomad
+  - nomad-config
+  become: true
+  roles:
+    - role: nomad-host
+      vars:
+        nomad_client: True
+
+- name : Vault
+  hosts: [vault_clients]
+  tags:
+  - vault-config
+  become: true
+  roles:
+    - role: vault-host
+
 
 - name : Ceph Install
   hosts: [ceph_hosts, bastion]
@@ -71,6 +145,8 @@
 - name : docker-install
   hosts: nomad_clients
   become: true
+  tags:
+    - nomad
   roles:
     - role: docker-host
       vars:
@@ -113,3 +189,14 @@
       vars:
         - disk_location: "{{ ceph_osd_physical_drive }}"
       
+- name : Nomad Start
+  hosts: [nomad_servers, nomad_clients]
+  become: true
+  tags:
+    - nomad
+  tasks:
+    - name: Start and Enable nomad
+      ansible.builtin.systemd:
+        name: nomad
+        enabled: true
+        state: restarted

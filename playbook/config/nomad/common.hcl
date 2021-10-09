@@ -1,6 +1,6 @@
 # /etc/nomad.d/common.hcl
 
-datacenter = "cwdc-os-1"
+datacenter = "cwdc"
 data_dir = "/opt/nomad/data"
 
 

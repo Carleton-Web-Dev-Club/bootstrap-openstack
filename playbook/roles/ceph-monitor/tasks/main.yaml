@@ -10,7 +10,7 @@
     cmd: "ceph-deploy --overwrite-conf new {{ groups['ceph_monitors'] | join(' ') }}"
     chdir: "{{ ceph_deploy_dir }}"
 
-- name: Copy Conf File
+- name: Copy Conf Tail File
   run_once: true
   ansible.builtin.copy:
     src: ../config/ceph/ceph-tail.conf

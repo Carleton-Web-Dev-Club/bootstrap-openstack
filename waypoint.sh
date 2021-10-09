@@ -1,0 +1,5 @@
+WAYPOINT_DOMAIN="cwdc.scs.carleton.ca"
+echo "Warning: Making Docker socks public"
+ssh nc-1  "sudo chmod 777 /run/docker.sock" 2> /dev/null
+ssh nc-2  "sudo chmod 777 /run/docker.sock" 2> /dev/null
+waypoint install -platform=nomad -nomad-dc=cwdc -accept-tos -nomad-consul-service -nomad-consul-service-ui-tags="traefik.enable=true,traefik.http.routers.waypoint-server.rule=Host(\`waypoint-ui.cwdc.cbains.ca\`),traefik.http.services.waypoint-server.loadbalancer.server.scheme=https,traefik.http.routers.waypoint-server.tls.certresolver=letsencrypt" -nomad-consul-service-backend-tags="traefik.enable=true,traefik.tcp.routers.waypoint-backend.rule=HostSNI(`waypoint3.cwdc.cbains.ca`),traefik.tcp.services.waypoint-backend.loadbalancer.server.scheme=h2c,traefik.http.routers.waypoint-backend.loadbalancer.service=src-grpc,traefik.http.routers.waypoint-backend.tls.certresolver=letsencrypt"

@@ -1,0 +1,91 @@
+- name: Find nomad configuration files
+  when: purge is defined and purge
+  find:
+    paths: ["/etc/nomad.d"]
+    pattern: "*.hcl"
+  register: files_to_delete
+
+- name: Find nomad state files
+  when: purge is defined and purge
+  find:
+    paths: ["/opt/nomad"]
+  register: files2_to_delete
+
+- name: Remove nomad configuration files
+  when: purge is defined and purge
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ files_to_delete.files + files2_to_delete.files }}"
+
+- name: Remove nomad bastion configuration files
+  when: purge is defined and purge
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items: ["/etc/consul-nomad-key"]
+
+- name: Check If Consul Nomad Key Generated
+  stat:
+    path: /etc/consul-nomad-key
+  register: cn_key
+  run_once: true
+  delegate_to: bastion
+
+- name: Get Consul Mgmt Token
+  slurp: 
+    src: /etc/consul-bootstrap
+  run_once: true
+  register: consul_mgmt_key_b64
+  delegate_to: bastion
+
+- name: Generate Nomad Token
+  when: not cn_key.stat.exists
+  run_once: true
+  delegate_to: bastion
+  shell: consul acl token create -policy-name "nomad-client-policy" -policy-name "nomad-server-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+' > /etc/consul-nomad-key
+
+- name: Wait
+  when: not cn_key.stat.exists
+  pause:
+    seconds: 5
+
+- name: Get Consul Nomad Token
+  delegate_to: bastion
+  run_once: True
+  slurp: 
+    src: /etc/consul-nomad-key
+  register: consul_nomad_key_b64
+
+- name: Add Config Folder
+  file:
+    state: directory
+    owner: root
+    group: root
+    mode: "700"
+    path: /etc/nomad.d
+
+- name: Install Common Config
+  template:
+    src: config/common.hcl
+    owner: root
+    group: root
+    mode: "600"
+    dest: /etc/nomad.d/ 
+
+- name: Install Client Config
+  when: nomad_client is defined and nomad_client
+  template:
+    src: config/client.hcl
+    owner: root
+    group: root
+    mode: "600"
+    dest: /etc/nomad.d/client.hcl
+
+- name: Install Server Config
+  when: nomad_server is defined and nomad_server
+  template:
+    src: config/server.hcl
+    mode: "600"
+    dest: /etc/nomad.d/server.hcl
+

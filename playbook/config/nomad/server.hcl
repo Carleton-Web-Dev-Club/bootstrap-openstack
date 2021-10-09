@@ -1,7 +1,7 @@
 # /etc/nomad.d/server.hcl
 
 # data_dir tends to be environment specific.
-datacenter = "cwdc-os-1"
+datacenter = "cwdc"
 data_dir = "/opt/nomad/data"
 server {
   enabled          = true

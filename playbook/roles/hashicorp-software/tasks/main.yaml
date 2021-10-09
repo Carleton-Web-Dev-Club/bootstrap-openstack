@@ -7,7 +7,12 @@
   apt_repository:
     repo: deb https://apt.releases.hashicorp.com bionic main
     state: present
-
+- name: Purge Software
+  when: purge is defined and purge
+  apt: 
+    state: absent
+    purge: yes 
+    name: "{{programs}}"
 - name: Install Software
   apt: 
     update_cache: yes 

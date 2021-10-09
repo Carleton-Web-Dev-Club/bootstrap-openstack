@@ -1,0 +1,95 @@
+- name: Stop vault
+  ansible.builtin.systemd:
+    name: vault
+    state: stopped
+
+- name: Find vault configuration files
+  when: purge is defined and purge
+  find:
+    paths: ["/etc/vault.d"]
+    pattern: "*.hcl"
+  register: files_to_delete
+
+- name: Find vault state files
+  when: purge is defined and purge
+  find:
+    paths: ["/opt/nomad"]
+  register: files2_to_delete
+
+- name: Remove vault configuration files
+  when: purge is defined and purge
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ files_to_delete.files + files2_to_delete.files }}"
+
+- name: Remove nomad bastion configuration files
+  when: purge is defined and purge
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items: ["/etc/consul-vault-key"]
+  run_once: true
+  delegate_to: bastion
+
+- name: Check If Consul Vault Key Generated
+  stat:
+    path: /etc/consul-vault-key
+  register: v_key
+  run_once: true
+  delegate_to: bastion
+
+- name: Get Consul Mgmt Token
+  slurp: 
+    src: /etc/consul-bootstrap
+  run_once: true
+  register: consul_mgmt_key_b64
+  delegate_to: bastion
+
+- name: Generate Vault Token
+  when: not v_key.stat.exists
+  run_once: true
+  delegate_to: bastion
+  register: consul_vault_output
+  shell: consul acl token create -policy-name "vault-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+'
+- name: Persist Vault Token
+  run_once: true
+  delegate_to: bastion
+  when: not v_key.stat.exists
+  copy:
+    content: "{{ consul_vault_output.stdout_lines[0] }}"
+    dest: /etc/consul-vault-key
+
+- name: Wait
+  when: not v_key.stat.exists
+  pause:
+    seconds: 5
+
+- name: Get Consul Vault Token
+  delegate_to: bastion
+  run_once: True
+  slurp: 
+    src: /etc/consul-vault-key
+  register: consul_vault_key_b64
+
+- name: Add Config Folder
+  file:
+    state: directory
+    owner: vault
+    group: vault
+    mode: "700"
+    path: /etc/vault.d
+
+- name: Install Vault Config
+  template:
+    src: config/vault.hcl
+    owner: vault
+    group: vault
+    mode: "600"
+    dest: /etc/vault.d/ 
+
+- name: Start and Enable vault
+  ansible.builtin.systemd:
+    name: vault
+    enabled: true
+    state: started

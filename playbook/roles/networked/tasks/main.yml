@@ -15,6 +15,31 @@
     src: ../config/hosts/hosts
     dest: /etc/hosts
 
+- name: Add Resolved config folder
+  file:
+    state: directory
+    owner: root
+    group: root
+    mode: "755"
+    path: /etc/systemd/resolved.conf.d
+
+- name: Copy Systemd Resolve
+  template: 
+    src: ../config/dns/consul.conf
+    dest: /etc/systemd/resolved.conf.d/consul.conf
+    mode: "644"
+
+- name: Install IPtables rules
+  command: iptables -t nat -A OUTPUT -d 127.0.1.2 -p udp --dport 53 -j REDIRECT --to-port 8600
+#TODO: Find a better iptable rule
+- name: Autoload IPtables
+  shell: echo "#! /sbin/iptables-restore" > /etc/network/if-up.d/iptables-rules; iptables-save | uniq >> /etc/network/if-up.d/iptables-rules; chmod +x /etc/network/if-up.d/iptables-rules
+
+- name: Restart Systemd Resolve
+  ansible.builtin.systemd:
+    state: restarted
+    name: systemd-resolved
+
 - name: Copy NTP File
   template: 
     src: ../config/ntp/timesyncd.conf
@@ -28,7 +53,12 @@
     state: restarted
     daemon_reload: yes
     name: systemd-timesyncd
-
+- name: disable unattended upgrades
+  apt: 
+    state: absent
+    purge: yes 
+    name: "unattended-upgrades"
+    
 - name: Check if reboot is needed
   stat:
     path: /var/run/reboot-required

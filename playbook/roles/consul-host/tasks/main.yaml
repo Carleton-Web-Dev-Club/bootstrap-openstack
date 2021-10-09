@@ -1,0 +1,53 @@
+- name: Check If Key Generated
+  stat:
+    path: /etc/consul-enc
+  register: consul_file
+  run_once: true
+  delegate_to: bastion
+
+- name: Generate Key
+  shell: consul keygen > /etc/consul-enc
+  run_once: true
+  delegate_to: bastion
+  when: not consul_file.stat.exists
+
+- name: Get Key
+  slurp: 
+    src: /etc/consul-enc
+  run_once: true
+  register: consul_key_b64
+  delegate_to: bastion
+
+- name: Make consul config folder
+  file: 
+    path: /etc/consul.d
+    state: directory
+    owner: consul
+    group: consul
+    mode: "700"
+
+- name: Install Config
+  template:
+    src: config/consul.hcl
+    owner: consul
+    group: consul
+    mode: "600"
+    dest: /etc/consul.d/
+
+- name: Install Server Config
+  when: consul_server is defined and consul_server
+  template:
+    src: config/server.hcl
+    owner: consul
+    group: consul
+    mode: "600"
+    dest: /etc/consul.d/
+
+- name: Install Client Config
+  when: consul_server is not defined or not consul_server
+  template:
+    src: config/client.hcl
+    owner: consul
+    group: consul
+    mode: "600"
+    dest: /etc/consul.d/

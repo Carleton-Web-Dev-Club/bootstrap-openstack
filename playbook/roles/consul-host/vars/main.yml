@@ -1,0 +1,1 @@
+leader_ip: "{{ hostvars[groups['consul_servers'][0]]['ansible_default_ipv4']['address'] }}"

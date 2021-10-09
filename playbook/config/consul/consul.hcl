@@ -1,4 +1,4 @@
-datacenter = "cwdc-os-1"
+datacenter = "cwdc"
 data_dir = "/opt/consul"
 encrypt = "{{ consul_key_b64.content | b64decode | trim}}"
 verify_incoming = false
