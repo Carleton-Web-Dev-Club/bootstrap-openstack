@@ -2,7 +2,7 @@
 if [ "$#" -gt 2 ]; then
   cd .
 else
-  cd /etc/consul-policies/
+  cd /opt/ad/consul/consul-policies/
 fi
 
 if [ "$#" -lt 2 ]; then

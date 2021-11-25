@@ -1,6 +1,5 @@
 127.0.0.1 localhost
 127.0.1.1 {{ inventory_hostname }}
-127.0.1.2 consul-dns
 
 134.117.26.5 stackcontrol02
 

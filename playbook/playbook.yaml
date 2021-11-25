@@ -5,6 +5,16 @@
     - name: Expand LVM
       command: /home/student/extend-lvm/extend-lvm.sh  /dev/vda
       changed_when: false
+- name: Make consul config folder
+  hosts: [bastion]
+  become: true
+  tasks:
+    - file: 
+        path: /opt/ad
+        state: directory
+        owner: root
+        group: root
+        mode: "500"
 
 - name: Configure Networking
   hosts: all
@@ -21,6 +31,8 @@
   hosts: all:!bastion
   become: true
   serial: 10
+  tags:
+    - debian
   roles:
     - debian
 
@@ -47,7 +59,7 @@
          - nomad
 
 - name : Vault Install
-  hosts: [vault_clients]
+  hosts: [vault]
   become: true
   tags:
     - vault
@@ -100,7 +112,7 @@
   become: true
   tags:
     - nomad
-    - nomad-config
+    - nomad_config
   roles:
     - role: nomad-host
       vars:
@@ -110,7 +122,7 @@
   hosts: [nomad_clients]
   tags:
   - nomad
-  - nomad-config
+  - nomad_config
   become: true
   roles:
     - role: nomad-host
@@ -124,6 +136,18 @@
   become: true
   roles:
     - role: vault-host
+      vars:
+        transit: 1
+
+
+- name : Vault
+  hosts: [vault2_clients]
+  tags:
+  - vault-config
+  become: true
+  roles:
+    - role: vault-host
+
 
 
 - name : Ceph Install
@@ -155,11 +179,13 @@
 - name: LVM loopback Setup
   hosts: [ceph_osds_loopback]
   become: true
+  tags:
+    - lvm
   roles:
     - lvm-loopback-setup
 
 - name: Ceph-Deploy Setup
-  hosts: bastion
+  hosts: [ceph_monitors, ceph_managers]
   roles:
     - ceph-monitor
     - ceph-mgr

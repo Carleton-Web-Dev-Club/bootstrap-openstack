@@ -15,25 +15,20 @@
     src: ../config/hosts/hosts
     dest: /etc/hosts
 
-- name: Add Resolved config folder
-  file:
-    state: directory
-    owner: root
-    group: root
-    mode: "755"
-    path: /etc/systemd/resolved.conf.d
-
-- name: Copy Systemd Resolve
+- name: Copy Preseed
   template: 
-    src: ../config/dns/consul.conf
-    dest: /etc/systemd/resolved.conf.d/consul.conf
+    src: ../config/iptables-persistent/preseed
+    dest: /tmp/preseed
     mode: "644"
+- name: Apply Preseed
+  shell: debconf-set-selections < /tmp/preseed
 
-- name: Install IPtables rules
-  command: iptables -t nat -A OUTPUT -d 127.0.1.2 -p udp --dport 53 -j REDIRECT --to-port 8600
-#TODO: Find a better iptable rule
-- name: Autoload IPtables
-  shell: echo "#! /sbin/iptables-restore" > /etc/network/if-up.d/iptables-rules; iptables-save | uniq >> /etc/network/if-up.d/iptables-rules; chmod +x /etc/network/if-up.d/iptables-rules
+- name: Install IPtables-persistent
+  apt: 
+    update_cache: yes 
+    name: "iptables-persistent"
+    state: present
+
 
 - name: Restart Systemd Resolve
   ansible.builtin.systemd:

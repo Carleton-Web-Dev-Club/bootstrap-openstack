@@ -16,13 +16,33 @@
     state: absent
   with_items: "{{ files_to_delete.files }}"
 
-
-- name: Remove Existing Bastion Data
+- name: Remove Consul config files
   when: purge is defined and purge
   file:
     path: "{{ item }}"
     state: absent
-  with_items:  ["/etc/consul-policies/", "/etc/consul-bootstrap", "/etc/consul-agent-token"]
+  with_items: ["/opt/ad/consul"]
+  run_once: true
+  delegate_to: bastion
+
+- name: Create consul install subfolder
+  run_once: true
+  delegate_to: bastion
+  file: 
+    path: /opt/ad/consul
+    state: directory
+    owner: root
+    group: root
+    mode: "600"
+    
+- name: Remove Existing Bastion Data
+  when: purge is defined and purge
+  run_once: true
+  delegate_to: bastion
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:  /opt/ad/consul/consul-bootstrap", "/opt/ad/consul/consul-agent-token"]
 
 - name: Start and Enable Consul
   ansible.builtin.systemd:
@@ -32,7 +52,7 @@
 
 - name: Check If Bootsrapped
   stat:
-    path: /etc/consul-bootstrap
+    path: /opt/ad/consul/consul-bootstrap
   register: consul_bs_file
   run_once: true
   delegate_to: bastion
@@ -63,7 +83,7 @@
   delegate_to: bastion
   copy:
     content: "{{ acl_create_res.stdout_lines[0] }}"
-    dest: /etc/consul-bootstrap
+    dest: /opt/ad/consul/consul-bootstrap
 
 - name: wait for sync
   pause:
@@ -71,7 +91,7 @@
 
 - name: Get Secret
   slurp: 
-    src: /etc/consul-bootstrap 
+    src: /opt/ad/consul/consul-bootstrap 
   register: secret_id_b64
   changed_when: false
   delegate_to: bastion
@@ -83,7 +103,7 @@
   run_once: true
   ansible.builtin.copy:
     src: ../consul-policies
-    dest: "/etc/"
+    dest: "/opt/ad/consul/"
     owner: root
     group: root
     mode: "600"
@@ -92,13 +112,13 @@
   run_once: true
   script:
     cmd: ../scripts/addPolicies.sh "{{ secret_id_b64.content | b64decode | trim }}" "{{ bootstrap_addr }}"
-    chdir: "/etc/consul-policies"
+    chdir: "/opt/ad/consul/consul-policies"
 
 - pause: 
     seconds: 30
 - name: Check If Agent Token Generated
   stat:
-    path: /etc/consul-agent-token
+    path: /opt/ad/consul/consul-agent-token
   register: consul_agent_file
   run_once: true
   delegate_to: bastion
@@ -116,7 +136,7 @@
   delegate_to: bastion
   copy:
     content: "{{ agent_token.stdout_lines[0] }}"
-    dest: /etc/consul-agent-token
+    dest: /opt/ad/consul/consul-agent-token
 
 - name: wait for sync
   pause:
@@ -124,7 +144,7 @@
 
 - name: Get Agent Token
   slurp: 
-    src: /etc/consul-agent-token 
+    src: /opt/ad/consul/consul-agent-token 
   register: secret_agent_b64
   changed_when: false
   delegate_to: bastion
@@ -141,7 +161,7 @@
     mode: "0600"
     owner: root
     group: root
-  with_items: ["/etc/consul-bootstrap","/etc/consul-agent-token"]
+  with_items: ["/opt/ad/consul/consul-bootstrap","/opt/ad/consul/consul-agent-token"]
 
 
 

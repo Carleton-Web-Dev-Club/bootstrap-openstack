@@ -8,21 +8,39 @@
   when: not lb_file.stat.exists
 
 - name: Change loopback perms
-  command: chmod 777 /opt/data.img
+  become: true
+  command: chmod 600 /opt/data.img
+  when: not lb_file.stat.exists
+
+- name: Change loopback perms
+  become: true
+  command: chown root:root /opt/data.img
   when: not lb_file.stat.exists
 
 - name: Mount Loopback
+  become: true
   command: losetup /dev/loop0 /opt/data.img
   when: not lb_file.stat.exists
 
 - name: Create Physical Disk
+  become: true
   command: pvcreate /dev/loop0
   when: not lb_file.stat.exists
 
 - name: Create Ceph-Volume-Group Disk
+  become: true
   command: vgcreate vg-ceph /dev/loop0
   when: not lb_file.stat.exists
   
 - name: Create LV on VG Disk
   command: lvcreate -n lv01 -l 100%FREE vg-ceph
+  become: true
   when: not lb_file.stat.exists
+
+- name: add losetup crontab
+  become: true
+  lineinfile:
+    path: "/etc/crontab"
+    regexp: "data.img"
+    line:  "@reboot         root    losetup /dev/loop0 /opt/data.img"
+    state: present

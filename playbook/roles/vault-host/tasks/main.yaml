@@ -28,20 +28,45 @@
   file:
     path: "{{ item }}"
     state: absent
-  with_items: ["/etc/consul-vault-key"]
+  with_items: ["/opt/ad/vault"]
   run_once: true
   delegate_to: bastion
 
+- name: Create Vault install subfolder
+  run_once: true
+  delegate_to: bastion
+  file: 
+    path: /opt/ad/vault
+    state: directory
+    owner: root
+    group: root
+    mode: "600"
+
+
+- name: Check If TLS Certs Generated
+  stat:
+    path: /opt/ad/vault/vault.cert
+  register: cert_file
+  run_once: true
+  delegate_to: bastion
+
+- name: Generate TLS Certs
+  when: not cert_file.stat.exists
+  run_once: true
+  delegate_to: bastion
+  register: consul_vault_output
+  command: openssl req -nodes -new -x509 -keyout /opt/ad/vault/vault.key -out /opt/ad/vault/vault.cert -days 3650 -subj '/CN=vault.service.consul'
+
 - name: Check If Consul Vault Key Generated
   stat:
-    path: /etc/consul-vault-key
+    path: "/opt/ad/vault/consul-token-{{ consul_acl }}"
   register: v_key
   run_once: true
   delegate_to: bastion
 
 - name: Get Consul Mgmt Token
   slurp: 
-    src: /etc/consul-bootstrap
+    src: /opt/ad/consul/consul-bootstrap
   run_once: true
   register: consul_mgmt_key_b64
   delegate_to: bastion
@@ -51,14 +76,14 @@
   run_once: true
   delegate_to: bastion
   register: consul_vault_output
-  shell: consul acl token create -policy-name "vault-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+'
+  shell: consul acl token create -policy-name "{{ consul_acl }}" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+'
 - name: Persist Vault Token
   run_once: true
   delegate_to: bastion
   when: not v_key.stat.exists
   copy:
     content: "{{ consul_vault_output.stdout_lines[0] }}"
-    dest: /etc/consul-vault-key
+    dest: "/opt/ad/vault/consul-token-{{ consul_acl }}"
 
 - name: Wait
   when: not v_key.stat.exists
@@ -69,7 +94,7 @@
   delegate_to: bastion
   run_once: True
   slurp: 
-    src: /etc/consul-vault-key
+    src: "/opt/ad/vault/consul-token-{{ consul_acl }}"
   register: consul_vault_key_b64
 
 - name: Add Config Folder
@@ -82,11 +107,51 @@
 
 - name: Install Vault Config
   template:
-    src: config/vault.hcl
+    src: "config/{{ item }}"
     owner: vault
     group: vault
     mode: "600"
     dest: /etc/vault.d/ 
+  with_items: ["vault.hcl", "vault.env"]
+- name: Make Certs Readable
+  delegate_to: bastion
+  run_once: True
+  file: 
+    path: "/opt/ad/vault/{{ item }}"
+    mode: "644"
+  with_items: ["vault.key", "vault.cert"]
+
+- name: Make Data Readable
+  delegate_to: bastion
+  run_once: True
+  file: 
+    path: "/opt/{{ item }}"
+    mode: "755"
+  with_items: ["ad", "ad/vault"]
+
+- name: Install Vault Certs
+  template:
+    src: "/opt/ad/vault/{{ item }}"
+    dest: "/opt/vault"
+    owner: "vault"
+    group: "vault"
+    mode: "600"
+  with_items: ["vault.key", "vault.cert"]
+
+- name: Make Data UnReadable
+  delegate_to: bastion
+  run_once: True
+  file: 
+    path: "/opt/{{ item }}"
+    mode: "700"
+  with_items: ["ad/vault"]
+
+- name: Get Unwrapped Token
+  delegate_to: bastion
+  run_once: True
+  slurp: 
+    src: "/opt/ad/vault/consul-token-{{ consul_acl }}"
+  register: consul_vault_key_b64
 
 - name: Start and Enable vault
   ansible.builtin.systemd:

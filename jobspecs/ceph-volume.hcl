@@ -1,3 +1,4 @@
+#ceph auth get-or-create client.nomad mon 'profile rbd' osd 'profile rbd pool=nomad' mgr 'profile rbd pool=nomad'
 id = "ceph-mysql"
 name = "ceph-mysql"
 type = "csi"
@@ -12,11 +13,11 @@ capability {
 
 secrets {
   userID  = "nomad"
-  userKey = "AQDHnFphHjHoNxAALCTM727rUt8Mv9OiWFQdTw=="
+  userKey = "AQABG25hPuuEHBAAiIEEEgM5GW3q4vXDrWVsJw=="
 }
 
 parameters {
-  clusterID = "6ae1b777-17b3-43cd-bbca-33dbb0321fb6"
+  clusterID = "ab0a7bf8-c0f0-49a1-a0c7-c8e44d83b3c7"
   pool = "nomad"
   imageFeatures = "layering"
 }

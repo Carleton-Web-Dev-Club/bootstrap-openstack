@@ -1,12 +1,71 @@
+- name: Remove Consul Bastion config files
+  when: purge is defined and purge
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items: ["/opt/ad/consul"]
+  run_once: true
+  delegate_to: bastion
+
+- name: Remove Consul config files
+  when: purge is defined and purge
+  file:
+    path: "/opt/consul/"
+    state: absent
+
+
+
+- name: Wipe Old Rules
+  iptables_raw:
+    state: absent
+    ipversion: 4
+    table: nat
+    name: consul_dns_lo
+
+- name: Create consul install subfolder
+  run_once: true
+  delegate_to: bastion
+  file: 
+    path: /opt/ad/consul
+    state: directory
+    owner: root
+    group: root
+    mode: "600"
+
+- name: Add Resolved config folder
+  file:
+    state: directory
+    owner: root
+    group: root
+    mode: "755"
+    path: /etc/systemd/resolved.conf.d
+
 - name: Check If Key Generated
   stat:
-    path: /etc/consul-enc
+    path: /opt/ad/consul/consul-enc
   register: consul_file
   run_once: true
   delegate_to: bastion
 
+
+- name: Copy Systemd Resolve
+  template: 
+    src: ../config/dns/consul.conf
+    dest: /etc/systemd/resolved.conf.d/consul.conf
+    mode: "644"
+
+- name: Install IPtables rules
+  iptables_raw:
+    ipversion: 4
+    name: consul_dns_lo
+    table: nat
+    rules: '-A OUTPUT -d 127.0.1.2 -p udp --dport 53 -j REDIRECT --to-port 8600'
+
+- name: Save IPtables
+  shell: netfilter-persistent save
+
 - name: Generate Key
-  shell: consul keygen > /etc/consul-enc
+  shell: consul keygen | tee /opt/ad/consul/consul-enc
   run_once: true
   delegate_to: bastion
   when: not consul_file.stat.exists
@@ -17,7 +76,12 @@
   run_once: true
   register: consul_key_b64
   delegate_to: bastion
+  become: true
 
+- name: Remove consul config folder
+  file: 
+    path: /etc/consul.d
+    state: absent
 - name: Make consul config folder
   file: 
     path: /etc/consul.d
@@ -29,6 +93,14 @@
 - name: Install Config
   template:
     src: config/consul.hcl
+    owner: consul
+    group: consul
+    mode: "600"
+    dest: /etc/consul.d/
+
+- name: Install Env
+  template:
+    src: config/consul.env
     owner: consul
     group: consul
     mode: "600"

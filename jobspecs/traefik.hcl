@@ -19,7 +19,11 @@ job "traefik" {
       port "https" {
         static = 443
       }
-
+      
+      port "internal" {
+        static = 8080
+      }
+      
       port "internal-secure" {
         static = 4443
       }
@@ -51,9 +55,8 @@ job "traefik" {
       driver = "docker"
 
       config {
-        image        = "traefik:v2.5.2"
+        image        = "ghcr.io/clarkbains/traefik-consul:latest"
         network_mode = "host"
-
         volumes = [
           "local/traefik.toml:/etc/traefik/traefik.toml",
           "local/dynamic/:/etc/traefik/config/dynamic/"
@@ -70,6 +73,8 @@ job "traefik" {
     address = ":80"
     [entryPoints.https]
     address = ":443"
+    [entryPoints.internal]
+    address = ":8080"
     [entryPoints.internal-secure]
     address = ":4443"
     [entryPoints.traefik]
@@ -87,11 +92,10 @@ job "traefik" {
     [providers.consulCatalog.endpoint]
       address = "127.0.0.1:8500"
       scheme  = "http"
-      token   = "2aee6018-a15a-dfb8-faf0-dde87a7ce132"
-
-[providers.file]
-  directory = "/etc/traefik/config/dynamic"
-  watch = true
+[providers.consul]
+    rootKey = "traefik"
+    endpoints = ["127.0.0.1:8500"]
+    token = "d4070097-f0f6-f9a1-4588-7b80ef4ec2c9"
 
 [certificatesresolvers.letsencrypt.acme]
   email = "clarkbains@gmail.com"
@@ -101,58 +105,6 @@ job "traefik" {
 EOF
 
         destination = "local/traefik.toml"
-      }
-     
-      template {
-        data = <<EOF
-[http]
-  [http.routers]
-    [http.routers.redirecttohttps]
-      entryPoints = ["http"]
-      middlewares = ["httpsredirect"]
-      rule = "HostRegexp(`{host:.+}`)"
-      service = "noop"
-    [http.routers.cephrouter]
-      entryPoints = ["internal-secure"]
-      rule = "Host(`ceph.cwdc.cbains.ca`)"
-      service = "cephdash"
-      [http.routers.cephrouter.tls]
-        certresolver= "letsencrypt"
-[tcp]
-  [tcp.routers]
-    [tcp.routers.waypoint-backend]
-      entryPoints = ["https"]
-      rule = "HostSNI(`waypoint3.cwdc.cbains.ca`)"
-      service = "waypoint-backend"
-      middlewares = ["test-auth"]
-      [tcp.routers.waypoint-backend.tls]
-        certresolver= "letsencrypt"
-        #insecureSkipVerify = true
-        [[tcp.routers.waypoint-backend.tls.domains]]
-        main = "waypoint3.cwdc.cbains.ca"
-        #passthrough=true
-
-  [http.services]
-    # noop service, the URL will be never called
-    [http.services.noop.loadBalancer]
-      [[http.services.noop.loadBalancer.servers]]
-        url = "http://127.0.0.1"
-    [http.services.cephdash.loadBalancer]
-      [[http.services.cephdash.loadBalancer.servers]]
-        url = "https://cm-1:8443"
-  [tcp.services]      
-    [tcp.services.waypoint-backend.loadBalancer]
-      [[tcp.services.waypoint-backend.loadBalancer.servers]]
-        address = "192.168.25.22:12345"
-  [http.middlewares]
-    [http.middlewares.httpsredirect.redirectScheme]
-      scheme = "https"
-  [tcp.middlewares]
-    [tcp.middlewares.test-auth.forwardAuth]
-    address = "https://auth-proxy.cbains.ca/"
-EOF
-
-        destination = "local/dynamic/dynamic.toml"
       }
 
       resources {

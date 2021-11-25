@@ -1,8 +1,9 @@
 - name: Update and Upgrade
   apt:
     update_cache: yes
-    upgrade: full
+    upgrade: dist
     autoremove: yes
+    purge: yes
 - name: Check if reboot is needed
   stat:
     path: /var/run/reboot-required

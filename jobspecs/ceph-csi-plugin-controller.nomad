@@ -8,7 +8,7 @@ job "ceph-csi-plugin-controller" {
       template {
         data        = <<EOF
 [{
-    "clusterID": "6ae1b777-17b3-43cd-bbca-33dbb0321fb6",
+    "clusterID": "ab0a7bf8-c0f0-49a1-a0c7-c8e44d83b3c7",
     "monitors": [
         "192.168.25.137",
         "192.168.25.159",

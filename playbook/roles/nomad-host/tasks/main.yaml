@@ -20,6 +20,8 @@
 
 - name: Remove nomad bastion configuration files
   when: purge is defined and purge
+  delegate_to: bastion
+  run_once: true
   file:
     path: "{{ item }}"
     state: absent
@@ -34,7 +36,7 @@
 
 - name: Get Consul Mgmt Token
   slurp: 
-    src: /etc/consul-bootstrap
+    src: /opt/ad/consul/consul-bootstrap
   run_once: true
   register: consul_mgmt_key_b64
   delegate_to: bastion
@@ -43,7 +45,7 @@
   when: not cn_key.stat.exists
   run_once: true
   delegate_to: bastion
-  shell: consul acl token create -policy-name "nomad-client-policy" -policy-name "nomad-server-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+' > /etc/consul-nomad-key
+  shell: consul acl token create -policy-name "nomad-client-policy" -policy-name "nomad-server-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+' | tee /etc/consul-nomad-key
 
 - name: Wait
   when: not cn_key.stat.exists
@@ -81,6 +83,15 @@
     group: root
     mode: "600"
     dest: /etc/nomad.d/client.hcl
+
+- name: Install RBD Module Autoprobe
+  when: nomad_client is defined and nomad_client
+  template:
+    src: config/rbd.conf
+    owner: root
+    group: root
+    mode: "600"
+    dest: /etc/modules-load.d/rbd.conf
 
 - name: Install Server Config
   when: nomad_server is defined and nomad_server

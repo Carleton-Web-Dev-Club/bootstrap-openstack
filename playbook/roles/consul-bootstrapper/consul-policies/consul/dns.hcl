@@ -8,3 +8,17 @@ service_prefix "" {
 query_prefix "" {
   policy = "read"
 }
+key_prefix "traefik" {
+  policy = "read"
+}
+
+session "" {
+  policy = "write"
+}
+
+agent_prefix "" {
+  policy = "read"
+}
+
+
+
