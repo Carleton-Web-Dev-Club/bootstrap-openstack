@@ -1,0 +1,28 @@
+{
+    "id": "ceph-{{ inventory_hostname}}",
+    "name": "ceph",
+    "tags": [
+        "traefik.enable=true",
+        "traefik.http.services.ceph.loadbalancer.server.scheme=https"
+    ],
+    "address": "",
+    "tagged_addresses": {
+        "lan": {
+            "address": "{{ inventory_hostname}}"
+        }
+    },
+    "checks": [
+        {
+            "args": [
+                "/opt/ceph-dash-check.sh",
+                "{{ansible_default_ipv4.address}}:8443"
+            ],
+            "interval": "10s"
+        }
+    ],
+    "port": 8443,
+    "weights": {
+        "passing": 1,
+        "warning": 0    
+    }
+}

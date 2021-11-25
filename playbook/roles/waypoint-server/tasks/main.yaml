@@ -1,0 +1,88 @@
+- name: Create a directory if it does not exist
+  run_once: true
+  delegate_to: bastion
+  ansible.builtin.file:
+    path: "{{ ceph_deploy_dir }}"
+    state: directory
+
+- name: Create New Monitors
+  run_once: true
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy --overwrite-conf new {{ groups['ceph_monitors'] | join(' ') }}"
+    chdir: "{{ ceph_deploy_dir }}"
+
+- name: Copy Conf Tail File
+  run_once: true
+  delegate_to: bastion
+  ansible.builtin.copy:
+    src: ../config/ceph/ceph-tail.conf
+    dest: "{{ ceph_deploy_dir }}/ceph-tail.conf"
+
+- name: Edit Conf File
+  run_once: true
+  delegate_to: bastion
+  shell:
+    cmd: "cat ceph.conf ceph-tail.conf > ceph-combined.conf; mv ceph-combined.conf ceph.conf"
+    chdir : "{{ ceph_deploy_dir }}"
+
+- name: Install Ceph
+  run_once: true
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy --overwrite-conf install {{ groups['ceph_hosts'] | join(' ') }}"
+    chdir: "{{ ceph_deploy_dir }}"
+
+- name: Create Monitors
+  run_once: true
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy --overwrite-conf mon create-initial"
+    chdir: "{{ ceph_deploy_dir }}"
+
+- name: Copy Keys
+  run_once: true
+  delegate_to: bastion
+  command: 
+    cmd: "ceph-deploy --overwrite-conf admin bastion {{ groups['ceph_hosts'] | join(' ') }}"
+    chdir: "{{ ceph_deploy_dir }}"
+
+- name: Copy Script
+  become: true
+  tags:
+    - ceph-consul
+  ansible.builtin.copy:
+    src: ../config/consul/check.sh
+    dest: "/opt/ceph-dash-check.sh"
+    mode: "555"
+    owner: root
+    group: root
+
+- name: Copy Consul Service
+  become: true
+  tags:
+    - ceph-consul
+  template:
+    src: ../config/consul/service.json
+    dest: "/tmp/consul-ceph-service.json"
+    mode: "644"
+    owner: root
+    group: root
+
+- name: Get Secret
+  slurp: 
+    src: /opt/ad/consul/consul-bootstrap
+  tags:
+    - ceph-consul
+  register: secret_id_b64
+  changed_when: false
+  become: true
+  delegate_to: bastion
+  run_once: True
+
+- name: Register Service
+  tags:
+    - ceph-consul
+  register: service_res
+
+  command: "curl -i -X PUT --data @/tmp/consul-ceph-service.json -H 'X-Consul-Token: {{ secret_id_b64.content | b64decode | trim }}' http://127.0.0.1:8500/v1/agent/service/register"
