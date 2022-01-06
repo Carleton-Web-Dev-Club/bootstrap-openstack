@@ -3,7 +3,8 @@
     "name": "ceph",
     "tags": [
         "traefik.enable=true",
-        "traefik.http.services.ceph.loadbalancer.server.scheme=https"
+        "traefik.http.services.ceph.loadbalancer.server.scheme=https",
+        "traefik.http.routers._ceph.service=noop@internal"
     ],
     "address": "",
     "tagged_addresses": {

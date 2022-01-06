@@ -5,16 +5,18 @@
     - name: Expand LVM
       command: /home/student/extend-lvm/extend-lvm.sh  /dev/vda
       changed_when: false
-- name: Make consul config folder
-  hosts: [bastion]
+
+- name: Change Passwords
+  hosts: all
   become: true
+  tags:
+    - security
   tasks:
-    - file: 
-        path: /opt/ad
-        state: directory
-        owner: root
-        group: root
-        mode: "500"
+    - name: Change user password
+      when: passwd is defined
+      user:
+        name: student
+        password: "{{ passwd|password_hash('sha512') }}"
 
 - name: Configure Networking
   hosts: all
@@ -31,8 +33,6 @@
   hosts: all:!bastion
   become: true
   serial: 10
-  tags:
-    - debian
   roles:
     - debian
 
@@ -59,7 +59,7 @@
          - nomad
 
 - name : Vault Install
-  hosts: [vault]
+  hosts: [vault_clients]
   become: true
   tags:
     - vault
@@ -110,19 +110,22 @@
 - name : Nomad Servers
   hosts: [nomad_servers]
   become: true
+  serial: 1
   tags:
+    - nomad-server
     - nomad
-    - nomad_config
+    - nomad-config
   roles:
     - role: nomad-host
       vars:
         nomad_server: True
 
 - name : Nomad Clients
+  serial: 1
   hosts: [nomad_clients]
   tags:
   - nomad
-  - nomad_config
+  - nomad-config
   become: true
   roles:
     - role: nomad-host
@@ -136,23 +139,23 @@
   become: true
   roles:
     - role: vault-host
-      vars:
-        transit: 1
+  vars:
+    transit: true
 
-
-- name : Vault
+- name : Vault Transit
   hosts: [vault2_clients]
   tags:
-  - vault-config
+  - vault2-config
   become: true
   roles:
     - role: vault-host
 
 
-
 - name : Ceph Install
   hosts: [ceph_hosts, bastion]
   become: true
+  tags:
+    - ceph
   roles:
     - ceph-host
 
@@ -180,17 +183,24 @@
   hosts: [ceph_osds_loopback]
   become: true
   tags:
-    - lvm
+    - loopback-lvm
   roles:
     - lvm-loopback-setup
 
 - name: Ceph-Deploy Setup
-  hosts: [ceph_monitors, ceph_managers]
+  hosts: bastion
   roles:
     - ceph-monitor
     - ceph-mgr
 
-    
+- name: Ceph Consul Service
+  hosts: [ceph_monitors]
+  roles:
+    - ceph-ui  
+  tags:
+    - ceph
+    - ceph-ui
+
 
 - name: Ceph OSD loopback
   hosts: [ceph_osds_loopback]
@@ -215,14 +225,3 @@
       vars:
         - disk_location: "{{ ceph_osd_physical_drive }}"
       
-- name : Nomad Start
-  hosts: [nomad_servers, nomad_clients]
-  become: true
-  tags:
-    - nomad
-  tasks:
-    - name: Start and Enable nomad
-      ansible.builtin.systemd:
-        name: nomad
-        enabled: true
-        state: restarted

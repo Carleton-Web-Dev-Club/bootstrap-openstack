@@ -1,0 +1,3 @@
+a config/vault.env file is required. This allows the main instance to retrieve secrets, namely the autounseal key, from the secondary instance. If the transit key is the only thing stored in the secondary vault, it may be easiest to provide the root token.
+
+VAULT_TOKEN=[put token to 2nd vault here]

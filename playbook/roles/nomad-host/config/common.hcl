@@ -8,3 +8,4 @@ data_dir = "/opt/nomad/data"
 consul {
   token = "{{ consul_nomad_key_b64.content | b64decode | trim  }}"
 }
+

@@ -2,7 +2,8 @@
 ui = true
 service_registration "consul" {  
   address      = "127.0.0.1:8500"
-  service_tags ="traefik.enable=true,traefik.http.routers.{{ consul_vault }}.entrypoints=internal-secure,traefik.http.routers.{{ consul_vault }}.rule=Host(`{{ consul_vault }}.cwdc.cbains.ca`),traefik.http.routers.{{ consul_vault }}.tls.certresolver=letsencrypt,traefik.http.services.{{ consul_vault }}.loadbalancer.server.scheme=https"
+  service_tags ="traefik.enable=true,traefik.http.routers._{{ consul_vault }}.service=noop@internal,traefik.http.services.{{ consul_vault }}.loadbalancer.server.scheme=https"
+
   token   = "{{ consul_vault_key_b64.content | b64decode }}"
   service = "{{ consul_vault }}" 
 

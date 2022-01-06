@@ -1,0 +1,97 @@
+[
+	{
+		"key": "traefik/http/middlewares/httpsredirect/redirectScheme/scheme",
+		"flags": 0,
+		"value": "aHR0cHM="
+	},
+	{
+		"key": "traefik/http/routers/cephrouter/entryPoints",
+		"flags": 0,
+		"value": "aW50ZXJuYWwtc2VjdXJlLGh0dHBz"
+	},
+	{
+		"key": "traefik/http/routers/cephrouter/loadbalancer/server/scheme",
+		"flags": 0,
+		"value": "aHR0cHM="
+	},
+	{
+		"key": "traefik/http/routers/cephrouter/rule",
+		"flags": 0,
+		"value": "SG9zdChgY2VwaC5jd2RjLmNiYWlucy5jYWAp"
+	},
+	{
+		"key": "traefik/http/routers/cephrouter/service",
+		"flags": 0,
+		"value": "Y2VwaEBjb25zdWxjYXRhbG9n"
+	},
+	{
+		"key": "traefik/http/routers/cephrouter/tls/certresolver",
+		"flags": 0,
+		"value": "bGV0c2VuY3J5cHQ="
+	},
+	{
+		"key": "traefik/http/routers/demorouter/entryPoints",
+		"flags": 0,
+		"value": "aHR0cHM="
+	},
+	{
+		"key": "traefik/http/routers/demorouter/rule",
+		"flags": 0,
+		"value": "SG9zdChgcmVkLXRlc3QuY3dkYy5jYmFpbnMuY2FgKQ=="
+	},
+	{
+		"key": "traefik/http/routers/demorouter/service",
+		"flags": 0,
+		"value": "ZGVtbw=="
+	},
+	{
+		"key": "traefik/http/routers/demorouter/tls/certresolver",
+		"flags": 0,
+		"value": "bGV0c2VuY3J5cHQ="
+	},
+	{
+		"key": "traefik/http/routers/redirecttohttps/entryPoints",
+		"flags": 0,
+		"value": "aHR0cA=="
+	},
+	{
+		"key": "traefik/http/routers/redirecttohttps/middlewares",
+		"flags": 0,
+		"value": "aHR0cHNyZWRpcmVjdA=="
+	},
+	{
+		"key": "traefik/http/routers/redirecttohttps/rule",
+		"flags": 0,
+		"value": "SG9zdFJlZ2V4cChge2hvc3Q6Lit9YCk="
+	},
+	{
+		"key": "traefik/http/routers/redirecttohttps/service",
+		"flags": 0,
+		"value": "bm9vcEBpbnRlcm5hbA=="
+	},
+	{
+		"key": "traefik/tcp/routers/waypoint-backend/entryPoints",
+		"flags": 0,
+		"value": "aHR0cHM="
+	},
+	{
+		"key": "traefik/tcp/routers/waypoint-backend/rule",
+		"flags": 0,
+		"value": "SG9zdFNOSShgd2F5cG9pbnQzLmN3ZGMuY2JhaW5zLmNhYCk="
+	},
+	{
+		"key": "traefik/tcp/routers/waypoint-backend/service",
+		"flags": 0,
+		"value": "d2F5cG9pbnQtYmFja2VuZA=="
+	},
+	{
+		"key": "traefik/tcp/routers/waypoint-backend/tls/certresolver",
+		"flags": 0,
+		"value": "bGV0c2VuY3J5cHQ="
+	},
+	{
+		"key": "traefik/tcp/services/waypoint-backend/loadBalancer/servers",
+		"flags": 0,
+		"value": "MTkyLjE2OC4yNS4yMjoxMjM0NQ=="
+	}
+]

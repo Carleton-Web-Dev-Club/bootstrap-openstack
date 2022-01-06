@@ -1,9 +1,9 @@
 # bootstrap-cwdc
 
-A collection of utilities to setup the CWDC openstack cluster. Some cool things include:
-- Ansible Playbooks
-- Scripts to autogenerate host lists
-- Script to rebuild/reset specific instances
-- Ceph-deploy configuration file
-
-This is missing a lot of information
+A collection of utilities to setup and maintain the CWDC openstack cluster. Some cool things include:
+- Ansible Playbooks (./playbook)
+- Utility Scripts (./scripts)
+ - Wipe all openstack instances
+ - Unseal one/multiple vault instances from the initial bootstrap output
+ - Use openstack network data to generate a /etc/hosts file
+- Job specifications for most active jobs

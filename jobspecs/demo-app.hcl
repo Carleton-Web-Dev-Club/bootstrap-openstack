@@ -18,7 +18,12 @@ job "demo-webapp" {
         "traefik.enable=true",
         "traefik.http.routers.wa.entrypoints=https",
         "traefik.http.routers.wa.rule=Host(`cwdc.scs.carleton.ca`)",
-        "traefik.http.routers.wa.tls.certresolver=letsencrypt"
+        "traefik.http.routers.wa.tls.certresolver=letsencrypt",
+        #"traefik.http.routers.wa.middlewares=clear-discord-headers@consul,wa-svc1,discord-auth@consul",
+        #"traefik.http.middlewares.wa-svc1.headers.customrequestheaders.X-cwdc-allow-ids=918617080780181604",
+        # "traefik.http.middlewares.wa-svc1.headers.customrequestheaders.X-cwdc-allow-names=service-user-1"
+
+
       ]
 
       check {

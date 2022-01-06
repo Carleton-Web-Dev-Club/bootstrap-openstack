@@ -146,13 +146,6 @@
     mode: "700"
   with_items: ["ad/vault"]
 
-- name: Get Unwrapped Token
-  delegate_to: bastion
-  run_once: True
-  slurp: 
-    src: "/opt/ad/vault/consul-token-{{ consul_acl }}"
-  register: consul_vault_key_b64
-
 - name: Start and Enable vault
   ansible.builtin.systemd:
     name: vault

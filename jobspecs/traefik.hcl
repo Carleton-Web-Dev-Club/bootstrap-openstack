@@ -28,9 +28,6 @@ job "traefik" {
         static = 4443
       }
 
-      port "api" {
-        static = 8081
-      }
     }
 
     service {
@@ -44,6 +41,7 @@ job "traefik" {
         timeout  = "2s"
       }
     }
+
    #Hold the certs
    ephemeral_disk {
       migrate = true
@@ -58,9 +56,11 @@ job "traefik" {
         image        = "ghcr.io/clarkbains/traefik-consul:latest"
         network_mode = "host"
         volumes = [
-          "local/traefik.toml:/etc/traefik/traefik.toml",
-          "local/dynamic/:/etc/traefik/config/dynamic/"
-        ]
+          "local/traefik.toml:/etc/traefik/traefik.toml"
+          ]
+      }
+      vault {        
+        policies = ["traefik"]
       }
 
       template {
@@ -77,25 +77,21 @@ job "traefik" {
     address = ":8080"
     [entryPoints.internal-secure]
     address = ":4443"
-    [entryPoints.traefik]
-    address = ":8081"
 
 [api]
     dashboard = true
-    insecure  = true
 
 # Enable Consul Catalog configuration backend.
 [providers.consulCatalog]
     prefix           = "traefik"
     exposedByDefault = false
-
     [providers.consulCatalog.endpoint]
       address = "127.0.0.1:8500"
       scheme  = "http"
 [providers.consul]
     rootKey = "traefik"
     endpoints = ["127.0.0.1:8500"]
-    token = "d4070097-f0f6-f9a1-4588-7b80ef4ec2c9"
+    token = "{{ with secret "consul/creds/traefik"}}{{.Data.token}}{{ end }}"
 
 [certificatesresolvers.letsencrypt.acme]
   email = "clarkbains@gmail.com"
@@ -105,8 +101,9 @@ job "traefik" {
 EOF
 
         destination = "local/traefik.toml"
+        change_mode   = "restart"
       }
-
+ 
       resources {
         cpu    = 100
         memory = 128

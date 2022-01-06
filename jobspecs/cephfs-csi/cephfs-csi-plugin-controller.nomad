@@ -1,12 +1,7 @@
-job "ceph-csi-plugin-nodes" {
+job "cephfs-csi-plugin-controller" {
   datacenters = ["cwdc"]
-  type        = "system"
-  group "nodes" {
-    network {
-      port "metrics" {}
-    }
-    task "ceph-node" {
-      driver = "docker"
+  group "controller" {
+    task "ceph-controller" {
       template {
         data        = <<EOF
 [{
@@ -21,8 +16,9 @@ EOF
         destination = "local/config.json"
         change_mode = "restart"
       }
+      driver = "docker"
       config {
-        image = "quay.io/cephcsi/cephcsi:v3.3.1"
+        image = "quay.io/cephcsi/cephcsi:v3.4.0"
         volumes = [
           "./local/config.json:/etc/ceph-csi-config/config.json"
         ]
@@ -37,31 +33,22 @@ EOF
           }
         ]
         args = [
-          "--type=rbd",
-          "--drivername=rbd.csi.ceph.com",
-          "--nodeserver=true",
+          "--type=cephfs",
+          "--controllerserver=true",
+          "--drivername=cephfs.csi.ceph.com",
           "--endpoint=unix://csi/csi.sock",
           "--nodeid=${node.unique.name}",
-          "--instanceid=${node.unique.name}-nodes",
-          "--pidlimit=-1",
-          "--logtostderr=true",
           "--v=5",
-          "--metricsport=$${NOMAD_PORT_metrics}"
         ]
-        privileged = true
       }
       resources {
         cpu    = 500
         memory = 256
       }
-      service {
-        name = "ceph-csi-nodes"
-        port = "metrics"
-        tags = [ "prometheus" ]
-      }
+
       csi_plugin {
-        id        = "ceph-csi"
-        type      = "node"
+        id        = "cephfs-csi"
+        type      = "controller"
         mount_dir = "/csi"
       }
     }

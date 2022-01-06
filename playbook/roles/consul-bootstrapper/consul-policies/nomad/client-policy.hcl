@@ -10,4 +10,8 @@ service_prefix "" {
   policy = "write"
 }
 
+key_prefix "nomad" {
+  policy = "read"
+}
+
 acl = "write"

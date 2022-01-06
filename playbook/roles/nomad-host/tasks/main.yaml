@@ -1,3 +1,8 @@
+- name: Stop Nomad
+  ansible.builtin.systemd:
+    name: nomad
+    state: stopped
+
 - name: Find nomad configuration files
   when: purge is defined and purge
   find:
@@ -25,11 +30,11 @@
   file:
     path: "{{ item }}"
     state: absent
-  with_items: ["/etc/consul-nomad-key"]
+  with_items: ["/opt/ad/consul/consul-nomad-key"]
 
 - name: Check If Consul Nomad Key Generated
   stat:
-    path: /etc/consul-nomad-key
+    path: /opt/ad/consul/consul-nomad-key
   register: cn_key
   run_once: true
   delegate_to: bastion
@@ -45,7 +50,7 @@
   when: not cn_key.stat.exists
   run_once: true
   delegate_to: bastion
-  shell: consul acl token create -policy-name "nomad-client-policy" -policy-name "nomad-server-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+' | tee /etc/consul-nomad-key
+  shell: consul acl token create -policy-name "nomad-client-policy" -policy-name "nomad-server-policy" -token "{{ consul_mgmt_key_b64.content | b64decode | trim }}" -http-addr="{{ bootstrap_addr }}" | grep --color=never -oP 'SecretID:\s*\K.+' | tee /opt/ad/consul/consul-nomad-key
 
 - name: Wait
   when: not cn_key.stat.exists
@@ -56,7 +61,7 @@
   delegate_to: bastion
   run_once: True
   slurp: 
-    src: /etc/consul-nomad-key
+    src: /opt/ad/consul/consul-nomad-key
   register: consul_nomad_key_b64
 
 - name: Add Config Folder
@@ -100,3 +105,7 @@
     mode: "600"
     dest: /etc/nomad.d/server.hcl
 
+- name: Start Nomad
+  ansible.builtin.systemd:
+    name: nomad
+    state: started
