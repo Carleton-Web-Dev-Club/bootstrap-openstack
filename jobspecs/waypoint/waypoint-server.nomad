@@ -13,13 +13,13 @@ job "waypoint-server" {
 
     network {
       port "grpc" {
-        static = 9701
+        to = 9701
       }
       port "https" {
-        static = 9702
+        to = 9702
       }
-      mode= "host"
     }
+
     service {
       name = "waypoint-ui"
       port = "https"
@@ -87,7 +87,6 @@ job "waypoint-server" {
               "-listen-http=0.0.0.0:9702"
             ]
         ports = ["grpc","https"]
-        network_mode = "host"
       }
 
       resources {

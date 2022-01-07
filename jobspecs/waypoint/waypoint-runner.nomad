@@ -3,9 +3,11 @@ job "waypoint-runner" {
 
   group "runner" {
     count = 1
-
-    network {
-      mode = "host"
+    volume "jobspecs" {
+      type      = "csi"
+      attachment_mode = "file-system"
+      access_mode     = "multi-node-multi-writer"
+      source    = "waypoint-js-data"
     }
 
     restart {
@@ -15,8 +17,20 @@ job "waypoint-runner" {
       mode     = "delay"
     }
 
+
     task "waypoint-runner" {
       driver = "docker"
+      
+      volume_mount {
+        volume      = "jobspecs"
+        destination = "/data"
+        read_only   = false
+      }
+      resources {
+        cpu    = 500
+        memory = 1000
+      }
+
       config {
         image = "hashicorp/waypoint:latest"
         args = ["runner",
@@ -29,8 +43,10 @@ job "waypoint-runner" {
         ]
       }
 
+ vault {        
       vault {        
-        policies = ["waypoint-env","default"]
+ vault {        
+        policies = ["waypoint-env"]
         change_mode   = "signal"        
         change_signal = "SIGUSR1"      
       }
@@ -54,7 +70,9 @@ WAYPOINT_SERVER_TLS_SKIP_VERIFY="TRUE"
         change_mode   = "restart"
         env         = true
         }
+     
 
-    }
+
+      }
   }
 }
