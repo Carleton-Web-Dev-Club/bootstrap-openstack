@@ -2,7 +2,6 @@
 job "traefik" {
   region      = "global"
   datacenters = ["cwdc"]
-  type        = "service"
   #Ingress traffic is on this node
   constraint {    
     attribute = "${node.unique.name}"    
@@ -10,6 +9,13 @@ job "traefik" {
   }
   group "traefik" {
     count = 1
+
+   # volume "certs" {
+   #   type      = "csi"
+   #   attachment_mode = "file-system"
+   #   access_mode     = "multi-node-multi-writer"
+   #   source    = "traefik-certs"
+   # }
 
     network {
       port "http" {
@@ -21,7 +27,7 @@ job "traefik" {
       }
       
       port "internal" {
-        static = 8080
+        static = 8081
       }
       
       port "internal-secure" {
@@ -41,9 +47,7 @@ job "traefik" {
         timeout  = "2s"
       }
     }
-
-   #Hold the certs
-   ephemeral_disk {
+    ephemeral_disk {
       migrate = true
       size    = 200
       sticky  = true
@@ -53,7 +57,7 @@ job "traefik" {
       driver = "docker"
 
       config {
-        image        = "ghcr.io/clarkbains/traefik-consul:latest"
+        image        = "traefik:latest"
         network_mode = "host"
         volumes = [
           "local/traefik.toml:/etc/traefik/traefik.toml"
@@ -62,6 +66,11 @@ job "traefik" {
       vault {        
         policies = ["traefik"]
       }
+
+     # volume_mount {
+     #   volume      = "certs"
+     #   destination = "/data"
+     # }
 
       template {
         data = <<EOF
@@ -73,13 +82,12 @@ job "traefik" {
     address = ":80"
     [entryPoints.https]
     address = ":443"
-    [entryPoints.internal]
-    address = ":8080"
     [entryPoints.internal-secure]
     address = ":4443"
 
 [api]
     dashboard = true
+    insecure = true
 
 # Enable Consul Catalog configuration backend.
 [providers.consulCatalog]
@@ -93,11 +101,11 @@ job "traefik" {
     endpoints = ["127.0.0.1:8500"]
     token = "{{ with secret "consul/creds/traefik"}}{{.Data.token}}{{ end }}"
 
-[certificatesresolvers.letsencrypt.acme]
-  email = "clarkbains@gmail.com"
-  storage = "/alloc/data/acme.json"
-  [certificatesresolvers.letsencrypt.acme.httpchallenge]
-    entrypoint = "http"
+#[certificatesresolvers.letsencrypt.acme]
+#  email = "clarkbains@gmail.com"
+#  storage = "/alloc/data/acme.json"
+#  [certificatesresolvers.letsencrypt.acme.httpchallenge]
+#    entrypoint = "http"
 EOF
 
         destination = "local/traefik.toml"

@@ -5,7 +5,24 @@ job "cephfs-csi-plugin-nodes" {
     network {
       port "metrics" {}
     }
+    
+    restart {
+      attempts = 3
+      delay    = "1m"
+      interval = "10m"
+      mode     = "delay"
+    }
+
     task "ceph-node" {
+      template {
+        #Ugly workaround to cause it to restart when there is a ceph-data in warning state.
+        data        = <<EOF
+  {{ $result := service "ceph-data" }}{{ if not $result }}PARSER ERROR{{end}}
+EOF
+        destination = "secrets/file.env"
+        change_mode = "restart"
+        env = true
+      }
       driver = "docker"
       config {
         image = "quay.io/cephcsi/cephcsi:v3.4.0"

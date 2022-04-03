@@ -1,0 +1,18 @@
+#!/bin/bash
+B64Data="`timeout -k 1 5s sudo ceph status | base64 | tr -d '\n'`"
+DATA="`echo $B64Data | base64 --decode`"
+echo "$DATA" | grep -P "mds:\s\d\/\d daemons\sup" > /dev/null
+mds=$?
+echo "$DATA" | grep -v "out of quorum" | grep "mon:" > /dev/null
+mod=$?
+echo "$DATA" | grep -P "volumes:\s*\d+\/\d+ healthy$" > /dev/null
+vol=$?
+
+echo $B64Data | base64 --decode
+
+if [[ $mds -eq "0" && $mod -eq "0" && $vol -eq "0" ]]
+then
+    exit 0;
+else
+    exit 1;
+fi

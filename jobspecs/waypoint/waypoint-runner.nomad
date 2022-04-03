@@ -42,26 +42,23 @@ job "waypoint-runner" {
           "/var/run/docker.sock:/var/run/docker.sock"
         ]
       }
-
- vault {        
+       
       vault {        
- vault {        
         policies = ["waypoint-env"]
-        change_mode   = "signal"        
-        change_signal = "SIGUSR1"      
       }
 
       template {
         data = <<EOH
+NOMAD_TOKEN="{{ with secret "nomad/creds/waypoint-runner"}}{{.Data.secret_id}}{{ end }}"
 {{ with secret "kv/projects/system/waypoint" }}
 {{ range $key, $pairs := .Data.data | explodeMap }}
 {{ $key }}="{{ $pairs }}"
 {{- end }}
 {{ end}}
 
-{{ range service "nomad" }}NOMAD_ADDR ="http://{{ .Address }}:{{ .Port }}"
+{{ range service "nomad" }}NOMAD_ADDR="http://{{ .Address }}:{{ .Port }}"
 {{ end }}
-{{ range service "waypoint-api" }}WAYPOINT_SERVER_ADDR="{{ .Address }}:{{ .Port }}"
+{{ range service "waypoint-api-secure" }}WAYPOINT_SERVER_ADDR="{{ .Address }}:{{ .Port }}"
 {{ end }}
 WAYPOINT_SERVER_TLS="TRUE"
 WAYPOINT_SERVER_TLS_SKIP_VERIFY="TRUE"

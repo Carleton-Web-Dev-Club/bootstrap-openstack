@@ -12,8 +12,11 @@ job "waypoint-server" {
     }
 
     network {
-      port "grpc" {
+      port "grpc_secure" {
         to = 9701
+      }
+      port "grpc_insecure" {
+        to = -1
       }
       port "https" {
         to = 9702
@@ -27,7 +30,7 @@ job "waypoint-server" {
       tags = [
         "traefik.enable=true",
         "traefik.http.routers.waypoint-server.middlewares=clear-discord-headers@consul,waypoint-auth,discord-auth@consul",
-        "traefik.http.routers.waypoint-server.rule=Host(`waypoint.cwdc.cbains.ca`)",
+        "traefik.http.routers.waypoint-server.rule=Host(`waypoint.cwdc.carleton.ca`)",
         "traefik.http.services.waypoint-server.loadbalancer.server.scheme=https",
         "traefik.http.routers.waypoint-server.tls.certresolver=letsencrypt",
         "traefik.http.routers.waypoint-server.entrypoints=https",
@@ -44,14 +47,25 @@ job "waypoint-server" {
       }
     }
     service {
-      name = "waypoint-api"
-      port = "grpc"
+      name = "waypoint-api-secure"
+      port = "grpc_secure"
+
+      check {
+        type     = "tcp"
+        interval = "2s"
+        timeout  = "2s"
+      }
+    }
+
+     service {
+      name = "waypoint-api-insecure"
+      port = "grpc_insecure"
 
       tags = [
         "traefik.enable=true",
-        "traefik.tcp.routers.waypoint-api.rule=HostSNI(`waypoint-api.cwdc.cbains.ca`)",
-        "traefik.tcp.routers.waypoint-api.tls.passthrough=true",
-        "traefik.tcp.routers.waypoint-api.entrypoints=https"
+        "traefik.tcp.routers.waypoint-api.rule=HostSNI(`waypoint-api.cwdc.carleton.ca`)",
+        "traefik.tcp.routers.waypoint-api.tls.certresolver=letsencrypt",
+        "traefik.tcp.routers.waypoint-api.entrypoints=https",
       ]
 
       check {
@@ -86,14 +100,66 @@ job "waypoint-server" {
               "-listen-grpc=0.0.0.0:9701",
               "-listen-http=0.0.0.0:9702"
             ]
-        ports = ["grpc","https"]
+        ports = ["grpc_secure","https"]
       }
 
       resources {
-        cpu    = 500
-        memory = 512
+        cpu    = 200
+        memory = 200
       }
       
+    }
+
+    task "tls-adder" {
+
+      restart {      
+        attempts = 3      
+        delay    = "5s"    
+      }
+      
+      resources {
+        cpu    = 20
+        memory = 10
+      }
+
+      env {
+        IN_PORT    = "${NOMAD_PORT_grpc_insecure}"
+      }
+
+      driver = "docker"
+
+      config {
+        image = "nginx"
+        ports = ["grpc_insecure"]
+        volumes = [
+          "nginx.conf:/etc/nginx/nginx.conf"
+        ]
+      }
+
+
+      template {
+        data = <<EOF
+events {
+    worker_connections  1024;
+}
+
+stream   {
+    upstream server_group   { {{ range service "waypoint-api-secure" }} 
+        server {{ .Address }}:{{ .Port }};{{ end }}
+    }
+
+    server  {
+        listen {{ env "IN_PORT" }};
+        proxy_pass server_group;
+        proxy_ssl  on;
+        proxy_ssl_verify        off;
+        
+    }
+}
+EOF
+        destination   = "nginx.conf"
+        change_mode   = "restart"
+      }
     }
   }
 }

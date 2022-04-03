@@ -8,12 +8,23 @@ service_registration "consul" {
   service = "{{ consul_vault }}" 
 
 }
-storage "consul" {
 
+
+{% if ha is defined and ha %}
+storage "raft" {
+  path = "/opt/vault-raft"
+  node_id = "{{inventory_hostname}}-raft"
+}
+cluster_addr = "https://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8201"
+api_addr = "https://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8200"
+{% else %}
+storage "consul" {
   address = "127.0.0.1:8500"
   path    = "{{ consul_vault }}"
   token   = "{{ consul_vault_key_b64.content | b64decode }}"
 }
+{% endif %}
+
 
 listener "tcp" {
   address     = "0.0.0.0:8200"

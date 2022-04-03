@@ -105,6 +105,15 @@
     mode: "700"
     path: /etc/vault.d
 
+- name: Add Raft Folder
+  when: ha is defined and ha
+  file:
+    state: directory
+    owner: vault
+    group: vault
+    mode: "700"
+    path: /opt/vault-raft
+
 - name: Install Vault Config
   template:
     src: "config/{{ item }}"
