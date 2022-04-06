@@ -2,7 +2,7 @@ job "demo-webapp" {
   datacenters = ["cwdc"]
 
   group "demo" {
-    count = 2
+    count = 20
 
     network {
       port  "http"{
@@ -19,18 +19,17 @@ job "demo-webapp" {
         "traefik.http.routers.wa.entrypoints=https",
         "traefik.http.routers.wa.rule=Host(`cwdc.carleton.ca`)",
         "traefik.http.routers.wa.tls.certresolver=letsencrypt",
-        "routing-cwdc.carleton.ca/"
+        "routing=cwdc.carleton.ca/",
+        "routing=cwdc.scs.carleton.ca/"
         #"traefik.http.routers.wa.middlewares=clear-discord-headers@consul,wa-svc1,discord-auth@consul",
         #"traefik.http.middlewares.wa-svc1.headers.customrequestheaders.X-cwdc-allow-ids=918617080780181604",
         # "traefik.http.middlewares.wa-svc1.headers.customrequestheaders.X-cwdc-allow-names=service-user-1"
-
-
       ]
 
       check {
         type     = "http"
         path     = "/"
-        interval = "2s"
+        interval = "3s"
         timeout  = "2s"
       }
     }
@@ -47,6 +46,11 @@ job "demo-webapp" {
         image = "hashicorp/demo-webapp-lb-guide"
         ports = ["http"]
       }
+      resources {
+        cpu    = 20
+        memory = 20
+      }
     }
+
   }
 }

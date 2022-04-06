@@ -2,17 +2,20 @@ const http = require("http");
 const fs = require('fs')
 const acmeClient = require('acme-client');
 const x509 = require('x509');
+const memoize = require('memoizee')
 const A_DAY = 1000*3600*24
 const Config = {
     ConsulDC: process.env["CONSUL_DC"] || "cwdc",
     VaultPath: process.env["VAULT_PATH"] || "kv/data/infrastructure/le-certs/",
     VaultListPath: process.env["VAULT_LIST_PATH"] || "kv/metadata/infrastructure/le-certs/",
     ConsulHttpChallengePath: "projects/infrastructure/le/http-01-challenges/",
+    ConsulOtherDomainPath: "projects/infrastructure/le/domains",
     AcmePrivKeyPath: process.env["ACME_PEM_PATH"] || "./privkey.pem", 
     AcmeAccountUrl: process.env["ACME_ACC_URL"] || "https://acme-v02.api.letsencrypt.org/acme/acct/93137713",
     RenewalThreshold: 30, //Days
     VaultToken: process.env["VAULT_TOKEN"],
-    VaultAddr: process.env["VAULT_ADDR"] || "https://active.vault.service.consul:8200"
+    VaultAddr: process.env["VAULT_ADDR"] || "https://active.vault.service.consul:8200",
+    MailTo: process.env["MAILTO"] || "clarkbains@scs.carleton.ca"
 }
 
 
@@ -40,27 +43,14 @@ acmeClient.setLogger((message) => {
 function truthy (e) { return !!e }
 
 function checkTags(tags, skipPrefixes = true) {
-    let excludePrefixes = [
-        "traefik.http",
-        "traefik.enable",
-        "traefik.tcp",
-        ".well-known"
-    ]
     let domains = []
     if (!Array.isArray(tags)) {
         tags = [tags]
     }
     for (let tag of tags) {
-        if (res = tag.split(/`/).map(e => e.match(/^(?:[\w-_]*\.)*[\w-_]+\.\w+$/)).filter(truthy).map(e => e[0])) {
+        if (res = tag.split(/`/).map(e => e.match(/^le-gen=(.*)$/)).filter(truthy).map(e => e[1])) {
             for (let match of res) {
-                let ok = true;
-                if (!skipPrefixes){
-                    for (let exclusion of excludePrefixes) {
-                        if (!(ok &= !match.startsWith(exclusion))) break;
-                    }
-                }
-                if (ok)
-                    domains.push(match)
+                domains.push(match)
             }
         }
     }
@@ -69,8 +59,6 @@ function checkTags(tags, skipPrefixes = true) {
 
 async function getRegisteredCatalogDomains() {
     let domains = []
-
-    let dcs = await consul.catalog.datacenters()
     let services = await consul.catalog.service.list({dc: Config.ConsulDC})
     for (let service of Object.keys(services)) {
         domains.push(...checkTags(services[service]))
@@ -78,30 +66,39 @@ async function getRegisteredCatalogDomains() {
     return domains
 }
 
-async function getRegisteredKVDomains(path) {
+async function getRegisteredKVDomains() {
     let domains = []
-    let routers = await consul.kv.keys({key: path})
-        
-    let promises = routers.filter(e => e.endsWith("/rule")).map (async e => await consul.kv.get(e))
-    for (let value of (await Promise.all(promises)).map(e => e.Value)){
-        domains.push(...checkTags(value))
+    let value = await consul.kv.get(Config.ConsulOtherDomainPath);
+    if (value && value.Value){
+        let split = value.Value.split(/\n/g)
+        domains = split.filter(e=>!e.startsWith("#"))
+    } else {
+        await consul.kv.set(Config.ConsulOtherDomainPath, `#Add all domains here to get LE certs for`)
     }
     return domains
 }
 
-async function validateAndGenerateCert(domain, force=false){
+async function needsToGenerateCert(domain){
     const currentDate = (new Date()).getTime()/A_DAY
-    if (!force){
-        try {
-            let current = await vault.read(Config.VaultPath + domain)
-            let cert = current.data.data.cert
-            const parsedCert = x509.parseCert(cert)
-            validityEnd = new Date(parsedCert.notAfter).getTime()/A_DAY
-            if (currentDate <= (validityEnd - Config.RenewalThreshold)){
-                return
-            }
-        } catch (e){}
-    }
+    try {
+        let current = await vault.read(Config.VaultPath + domain)
+        let cert = current.data.data.cert
+        const parsedCert = x509.parseCert(cert)
+        validityEnd = new Date(parsedCert.notAfter).getTime()/A_DAY
+        if (currentDate <= (validityEnd - Config.RenewalThreshold)){
+            return false
+        }
+    } catch (e){}
+    return true
+}
+
+let memoizedNeedsToGenerateCert = memoize(needsToGenerateCert, { async: true, maxAge: A_DAY });
+
+async function validateAndGenerateCert(domain, force=false){
+
+    if (!force  && !(await memoizedNeedsToGenerateCert(domain))) return
+    //Only memoize false
+    memoizedNeedsToGenerateCert.delete(domain);
     console.log("Attempting to get certificate for " + domain)
     const order = await client.createOrder({ identifiers: [domain].map((d) => ({ type: 'dns', value: d })) });
     const authorizations = await client.getAuthorizations(order);
@@ -153,29 +150,55 @@ async function validateAndGenerateCert(domain, force=false){
             await client.deactivateAuthorization(authz);
         }
         console.log(e)
-    }
-
-    
+    }    
 }
-async function recheckAll() {
-    console.log("Checking all certs")
+
+async function getAllDomains(){
     let domains = [
         ...(await getRegisteredCatalogDomains()),
         ...(await getRegisteredKVDomains("traefik/http/routers"))
     ]
+    return domains
+}
+
+async function recheckAll() {
+    console.log("Checking all certs")
+    let domains = await getAllDomains()
     let allDomains = new Set(domains)
     for (let domain of allDomains){
         await validateAndGenerateCert(domain, true)
     }
 }
 
+let catalogWatch = consul.watch({
+    method: consul.catalog.services,
+    options: {dc: Config.ConsulDC},
+    backoffFactor: 1000
+})
+
+catalogWatch.on('change', (data, res)=>{
+    let s = new Set(getRegisteredCatalogDomains())
+    console.log("New changes to catalog")
+    s.forEach(validateAndGenerateCert)
+})
+
+
+let kvWatch = consul.watch({
+    method: consul.kv.get,
+    options: {key: Config.ConsulOtherDomainPath},
+    backoffFactor: 1000
+})
+
+kvWatch.on('change', async (data, res)=>{
+    let s = new Set(getRegisteredKVDomains())
+    console.log("New changes to K/V store")
+    s.forEach(validateAndGenerateCert)
+})
+
+
 async function purge(){
     console.log("Purging old certs")
-    let domains = [
-        ...(await getRegisteredCatalogDomains()),
-        ...(await getRegisteredKVDomains("traefik/http/routers"))
-    ]
-    let domainSet = new Set(domains)
+    let domainSet = new Set(await getAllDomains())
     try {
         const vaultDomains = await vault.list(Config.VaultListPath)
         let savedKeys = vaultDomains.data.keys
@@ -226,7 +249,7 @@ http.createServer(async function (req, res) {
 
 client.createAccount({
     termsOfServiceAgreed: true,
-    contact: [`mailto:clarkbains@gmail.com`]
+    contact: [`mailto:${Config.MailTo}`]
 }).then(e=>{
     console.log("Logged into ACME Server")
     main()
@@ -238,11 +261,7 @@ setInterval(purge, 10*A_DAY)
 setInterval(recheckAll, A_DAY)
 
 async function main(){
-    let domains = [
-        ...(await getRegisteredCatalogDomains()),
-        ...(await getRegisteredKVDomains("traefik/http/routers"))
-    ]
-    console.log(domains)
+    console.log(await getAllDomains())
     await recheckAll()
     console.log("Startup Done.")
 }

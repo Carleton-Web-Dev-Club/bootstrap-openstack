@@ -1,4 +1,4 @@
-job "fabio" {
+job "ingress-control" {
   region      = "global"
   datacenters = ["cwdc"]
   #Ingress traffic is on this node
@@ -6,38 +6,37 @@ job "fabio" {
     attribute = "${node.unique.name}"    
     value     = "rp-1"    
   }
-  group "fabio" {
+  group "loadbalancing" {
     count = 1
 
     network {
       port "http" {
         static = 80
       }
-      
       port "https" {
         static = 443
       }
-      
       port "ui" {
         static = 9998
       }
-
     }
 
-   # service {
-   #   name = "fabio"
-   #   port = "http"
-   #   check {
-   #     name     = "alive"
-   #     type     = "tcp"
-   #     port     = "http"
-   #     interval = "10s"
-   #     timeout  = "2s"
-   #   }
-   # }
+    service {
+      name = "fabio"
+      port = "ui"
+      check {
+        name     = "alive"
+        type     = "http"
+        path     = "/health"
+        interval = "10s"
+        timeout  = "2s"
+      }
+      tags = [
+        "routing=traefik.cwdc.carleton.ca/",
+      ]
+    }
 
-
-    task "fabio" {
+    task "fabio-secure" {
       driver = "docker"
 
       config {
@@ -45,7 +44,8 @@ job "fabio" {
         network_mode = "host"
         args  = [
               "-cfg",
-              "/etc/fabio.conf"
+              "/etc/fabio.conf",
+              "-insecure"
             ]
         volumes = [
           "local/fabio.conf:/etc/fabio.conf"
@@ -58,28 +58,28 @@ job "fabio" {
 
       template {
         data = <<EOF
-ui.access = rw
-log.access.target = stdout
-proxy.cs = cs=vaultcerts;type=vault;cert=kv/infrastructure/le-certs
-proxy.addr =:80;proto=http;
-proxy.addr =:443;proto=https;cs=vaultcerts
-registry.custom.checkTLSSkipVerify = true
+ui.access=ro
+log.access.target=
+proxy.cs= cs=vaultcerts;type=vault;cert=kv/infrastructure/le-certs
+proxy.addr=:443;proto=https;cs=vaultcerts
+proxy.matcher=iprefix
+registry.consul.service.status=passing,unknown
+registry.custom.checkTLSSkipVerify=true
 registry.consul.tagprefix=routing=
-registry.consul.token = {{ with secret "consul/creds/fabio"}}{{.Data.token}}{{ end }}
+registry.consul.token={{ with secret "consul/creds/fabio"}}{{.Data.token}}{{ end }}
+registry.consul.register.enabled=false
 ui.addr = :9998
+
 EOF
 
         destination = "local/fabio.conf"
         change_mode   = "restart"
       }
 
-#
-#vault token create -policy fabio -period 7200h
             template {
         data = <<EOF
 VAULT_ADDR=https://active.vault.service.consul:8200
 VAULT_SKIP_VERIFY=TRUE
-V1AULT_TOKEN=s.Czg7FsgiuQEL41ErbafF3RSL
 EOF
         destination = "local/fabio.env"
         env = true
@@ -91,5 +91,41 @@ EOF
         memory = 500
       }
     }
+
+
+    task "fabio-redirector" {
+      driver = "docker"
+      config {
+        image        = "fabiolb/fabio:latest"
+        ports  = ["http"]
+        args  = [
+              "-cfg",
+              "/etc/fabio.conf",
+              "-insecure"
+            ]
+        volumes = [
+          "local/fabio.conf:/etc/fabio.conf"
+          ]
+      }
+
+      template {
+        data = <<EOF
+ui.access=ro
+log.access.target=
+proxy.addr=:80;proto=http
+registry.backend = static
+proxy.matcher=glob
+registry.static.routes = route add https-redirect *:80/* https://$host$path opts "redirect=301"
+EOF
+        destination = "local/fabio.conf"
+        change_mode   = "restart"
+      }
+
+      resources {
+        cpu    = 50
+        memory = 20
+      }
+    }
+
   }
 }
