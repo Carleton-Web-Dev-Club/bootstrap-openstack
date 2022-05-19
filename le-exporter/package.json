@@ -1,0 +1,17 @@
+{
+  "name": "le-exporter",
+  "version": "1.0.0",
+  "description": "LE exporter is a small utility to help manage certificates with a Hashistack deployment. This gathers information from consul and gets certs and loads them into vault",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Clark Bains",
+  "license": "ISC",
+  "dependencies": {
+    "acme-client": "^4.2.5",
+    "consul": "^0.40.0",
+    "memoizee": "^0.4.15",
+    "node-vault": "^0.9.22"
+  }
+}

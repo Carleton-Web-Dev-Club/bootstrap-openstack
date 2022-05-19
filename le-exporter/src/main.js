@@ -1,9 +1,10 @@
 const http = require("http");
 const fs = require('fs')
 const acmeClient = require('acme-client');
-const x509 = require('x509');
+const crypto = require("crypto")
 const memoize = require('memoizee')
 const A_DAY = 1000*3600*24
+Error.stackTraceLimit = Infinity
 const Config = {
     ConsulDC: process.env["CONSUL_DC"] || "cwdc",
     VaultPath: process.env["VAULT_PATH"] || "kv/data/infrastructure/le-certs/",
@@ -14,31 +15,28 @@ const Config = {
     AcmeAccountUrl: process.env["ACME_ACC_URL"] || "https://acme-v02.api.letsencrypt.org/acme/acct/93137713",
     RenewalThreshold: 30, //Days
     VaultToken: process.env["VAULT_TOKEN"],
-    VaultAddr: process.env["VAULT_ADDR"] || "https://active.vault.service.consul:8200",
+    VaultAddr: process.env["VAULT_HTTP_ADDR"] || "https://active.vault.service.consul:8200",
     MailTo: process.env["MAILTO"] || "clarkbains@scs.carleton.ca"
 }
 
-
 const consul = require('consul')({
     defaults: {
-        token: process.env["CONSUL_HTTP_TOKEN"]
+        token: process.env["CONSUL_HTTP_TOKEN"],
     },
-    promisify: true
+    promisify: true,
+    host: process.env["CONSUL_HTTP_HOST"] || "localhost"
 })
 
 const vault = require("node-vault")({
-    endpoint: 'https://active.vault.service.consul:8200',
-    token: Config.VaultToken
+    endpoint: Config.VaultAddr,
+    token: Config.VaultToken,
+    requestOptions:{strictSSL:false}
 });
 
 const client = new acmeClient.Client({
     directoryUrl: acmeClient.directory.letsencrypt.production,
     accountKey: String(fs.readFileSync(Config.AcmePrivKeyPath))
 })
-
-acmeClient.setLogger((message) => {
-    //console.log(message);
-});
 
 function truthy (e) { return !!e }
 
@@ -48,9 +46,9 @@ function checkTags(tags, skipPrefixes = true) {
         tags = [tags]
     }
     for (let tag of tags) {
-        if (res = tag.split(/`/).map(e => e.match(/^le-gen=(.*)$/)).filter(truthy).map(e => e[1])) {
+        if (res = tag.split(/`/).map(e => e.match(/^cert-for=(.*)$/)).filter(truthy).map(e => e[1])) {
             for (let match of res) {
-                domains.push(match)
+                domains.push(...(match.split(/\s?,\s?/g)))
             }
         }
     }
@@ -68,11 +66,11 @@ async function getRegisteredCatalogDomains() {
 
 async function getRegisteredKVDomains() {
     let domains = []
-    let value = await consul.kv.get(Config.ConsulOtherDomainPath);
-    if (value && value.Value){
+    try {
+        let value = await consul.kv.get(Config.ConsulOtherDomainPath);
         let split = value.Value.split(/\n/g)
-        domains = split.filter(e=>!e.startsWith("#"))
-    } else {
+        domains = split.filter(e=>!e.startsWith("#")).map(e=>e.replace(/\s/g, "")).filter(truthy)
+    } catch (e){
         await consul.kv.set(Config.ConsulOtherDomainPath, `#Add all domains here to get LE certs for`)
     }
     return domains
@@ -83,20 +81,22 @@ async function needsToGenerateCert(domain){
     try {
         let current = await vault.read(Config.VaultPath + domain)
         let cert = current.data.data.cert
-        const parsedCert = x509.parseCert(cert)
-        validityEnd = new Date(parsedCert.notAfter).getTime()/A_DAY
+        const parsedCert = new crypto.X509Certificate(cert)
+
+        validityEnd = new Date(parsedCert.validTo).getTime()/A_DAY
         if (currentDate <= (validityEnd - Config.RenewalThreshold)){
             return false
         }
-    } catch (e){}
+    } catch (e){
+    }
     return true
 }
 
 let memoizedNeedsToGenerateCert = memoize(needsToGenerateCert, { async: true, maxAge: A_DAY });
 
 async function validateAndGenerateCert(domain, force=false){
-
-    if (!force  && !(await memoizedNeedsToGenerateCert(domain))) return
+    let b = await needsToGenerateCert(domain)
+    if (!force  && !b) return
     //Only memoize false
     memoizedNeedsToGenerateCert.delete(domain);
     console.log("Attempting to get certificate for " + domain)
@@ -156,7 +156,7 @@ async function validateAndGenerateCert(domain, force=false){
 async function getAllDomains(){
     let domains = [
         ...(await getRegisteredCatalogDomains()),
-        ...(await getRegisteredKVDomains("traefik/http/routers"))
+        ...(await getRegisteredKVDomains())
     ]
     return domains
 }
@@ -166,34 +166,39 @@ async function recheckAll() {
     let domains = await getAllDomains()
     let allDomains = new Set(domains)
     for (let domain of allDomains){
-        await validateAndGenerateCert(domain, true)
+        await validateAndGenerateCert(domain)
     }
 }
 
-let catalogWatch = consul.watch({
-    method: consul.catalog.services,
-    options: {dc: Config.ConsulDC},
-    backoffFactor: 1000
-})
+function addWatchers(){
+    let catalogWatch = consul.watch({
+        method: consul.catalog.services,
+        options: {dc: Config.ConsulDC},
+        backoffFactor: 1000
+    })
+    
+    let kvWatch = consul.watch({
+        method: consul.kv.get,
+        options: {key: Config.ConsulOtherDomainPath},
+        backoffFactor: 1000
+    })
+    
+    
+    catalogWatch.on('change', async (data, res)=>{
+        let s = new Set(await getRegisteredCatalogDomains())
+        console.log("New changes to catalog")
+        s.forEach((e) => {validateAndGenerateCert(e)})
+    })
+    
+    
+    
+    kvWatch.on('change', async (data, res)=>{
+        let s = new Set(await getRegisteredKVDomains())
+        console.log("New changes to K/V store")
+        s.forEach( (e) => {validateAndGenerateCert(e)})
+    })
+}
 
-catalogWatch.on('change', (data, res)=>{
-    let s = new Set(getRegisteredCatalogDomains())
-    console.log("New changes to catalog")
-    s.forEach(validateAndGenerateCert)
-})
-
-
-let kvWatch = consul.watch({
-    method: consul.kv.get,
-    options: {key: Config.ConsulOtherDomainPath},
-    backoffFactor: 1000
-})
-
-kvWatch.on('change', async (data, res)=>{
-    let s = new Set(getRegisteredKVDomains())
-    console.log("New changes to K/V store")
-    s.forEach(validateAndGenerateCert)
-})
 
 
 async function purge(){
@@ -222,7 +227,12 @@ async function purge(){
 //**Promises */
 http.createServer(async function (req, res) {
     let path = req.url
-    if (path.startsWith("/.well-known/acme-challenge/")){
+    if (path.startsWith("/health")){
+        res.write("Ok!")
+        res.statusCode = 200
+        res.end()
+        return
+    } else if (path.startsWith("/.well-known/acme-challenge/")){
         let components = path.split('/').filter(truthy)
         if (components.length == 3 && components[2].match(/^[\d\w_-]+$/)){
             let consulPath = Config.ConsulHttpChallengePath + components[2]
@@ -263,5 +273,6 @@ setInterval(recheckAll, A_DAY)
 async function main(){
     console.log(await getAllDomains())
     await recheckAll()
+    addWatchers()
     console.log("Startup Done.")
 }
